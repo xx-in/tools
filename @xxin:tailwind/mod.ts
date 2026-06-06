@@ -110,7 +110,8 @@ async function main() {
     // 支持 class="...", className='...', className={`...`}, :class="..." 等
     const attrRegex = /\b(class|className|:class)\s*=\s*(?:(["'])(.*?)\2|{(\s*`[\s\S]*?`\s*)}|{(\s*["'][\s\S]*?["']\s*)})/g;
 
-    // 正则 B：匹配 CSS 样式表中的 @apply 语句 [INDEX_1.2.3] const applyRegex = /@apply\s+([^;]+);/g;
+    // 正则 B：匹配 CSS 样式表中的 @apply 语句 [INDEX_1.2.3]
+    const applyRegex = /@apply\s+([^;]+);/g;
 
     for (const filePath of files) {
       const content = await Deno.readTextFile(filePath);
@@ -118,7 +119,7 @@ async function main() {
 
       // 优化 HTML/JSX 标签属性
       let newContent = content.replace(attrRegex, (match, attrName, quote, simpleContent, backtickContent, curlyQuoteContent) => {
-        // 1. 处理普通引号类名 (class="p-6")
+        // 1. 处理普通引号类名 (class="p-4 p-6")
         if (simpleContent !== undefined) {
           if (attrName === ":class" && (simpleContent.includes("{") || simpleContent.includes("["))) {
             return match; // 忽略复杂的 Vue/Svelte 动态对象绑定，保证绝对安全
@@ -130,7 +131,7 @@ async function main() {
           }
         }
         
-        // 2. 处理大括号里的模板字符串 (className={`p-4${active ? 'bg-red' : ''}`})
+        // 2. 处理大括号里的模板字符串 (className={`p-4 ${active ? 'bg-red' : ''}`})
         if (backtickContent !== undefined) {
           const inner = backtickContent.trim().slice(1, -1);
           const optimizedInner = optimizeTemplateLiteral(inner);
@@ -140,7 +141,7 @@ async function main() {
           }
         }
 
-        // 3. 处理大括号里的普通引号 (className={"p-6"})
+        // 3. 处理大括号里的普通引号 (className={"p-4 p-6"})
         if (curlyQuoteContent !== undefined) {
           const inner = curlyQuoteContent.trim().slice(1, -1);
           const optimizedInner = optimizeClassString(inner);
@@ -154,7 +155,9 @@ async function main() {
         return match;
       });
 
-      // 优化 CSS 样式表中的 @apply newContent = newContent.replace(applyRegex, (match, classList) => { const optimized = optimizeClassString(classList);
+      // 优化 CSS 样式表中的 @apply
+      newContent = newContent.replace(applyRegex, (match, classList) => {
+        const optimized = optimizeClassString(classList);
         if (optimized !== classList) {
           wasModified = true;
           return `@apply ${optimized};`;
