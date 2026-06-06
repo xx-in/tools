@@ -1,0 +1,26 @@
+{
+  "version": "5",
+  "specifiers": {
+    "npm:commander@11": "11.1.0",
+    "npm:google-translate-api-x@10": "10.7.2",
+    "npm:picocolors@1": "1.1.1"
+  },
+  "npm": {
+    "commander@11.1.0": {
+      "integrity": "sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ=="
+    },
+    "google-translate-api-x@10.7.2": {
+      "integrity": "sha512-GSmbvGMcnULaih2NFgD4Y6840DLAMot90mLWgwoB+FG/QpetyZkFrZkxop8ZxXgOAQXGskFOhGJady8nA6ZJ2g=="
+    },
+    "picocolors@1.1.1": {
+      "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="
+    }
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:commander@11",
+      "npm:google-translate-api-x@10",
+      "npm:picocolors@1"
+    ]
+  }
+}

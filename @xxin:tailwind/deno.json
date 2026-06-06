@@ -1,0 +1,19 @@
+{
+  "name": "@xxin/tailwind",
+  "version": "0.0.1",
+  "license": "MIT",
+  "description": "A command-line tool for automatically fixing Tailwind CSS arbitrary values (e.g. w-[28px] -> w-7) using ESLint.",
+  "exports": {
+    ".": "./mod.ts",
+    "./bin": "./mod.ts"
+  },
+  "publish": {
+    "include": [
+      "deno.json",
+      "README.md",
+      "mod.ts"
+    ]
+  },
+  "imports": {
+  }
+}

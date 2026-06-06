@@ -1,0 +1,23 @@
+{
+  "name": "@xxin/fy",
+  "version": "0.0.2",
+  "license": "MIT",
+  "description": "A command-line tool for translating text using Google Translate API.",
+  "exports": {
+    ".": "./mod.ts",
+    "./bin": "./mod.ts"
+  },
+  "publish": {
+    "include": [
+      "deno.json",
+      "README.md",
+      "mod.ts"
+    ]
+  },
+  "imports": {
+    "node:readline": "node:readline",
+    "npm:commander@^11.0.0": "npm:commander@^11.0.0",
+    "npm:google-translate-api-x@^10.0.0": "npm:google-translate-api-x@^10.0.0",
+    "npm:picocolors@^1.0.0": "npm:picocolors@^1.0.0"
+  }
+}
