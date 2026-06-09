@@ -6,7 +6,7 @@ import process from "node:process";
 
 const program = new Command();
 
-async function downloadImage(imageName, outputFilename) {
+async function downloadImage(imageName: string, outputFilename?: string): Promise<void> {
   const prefix = "local.harbor.com/park-project/";
   
   // 规范化镜像名称：如果用户传入了前缀，先剥离
@@ -102,24 +102,27 @@ async function downloadImage(imageName, outputFilename) {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        await file.write(value);
-        downloadedBytes += value.length;
-        
-        if (totalBytes > 0) {
-          const percent = ((downloadedBytes / totalBytes) * 100).toFixed(2);
-          const mb = (downloadedBytes / 1024 / 1024).toFixed(2);
-          const totalMb = (totalBytes / 1024 / 1024).toFixed(2);
-          Deno.stdout.writeSync(new TextEncoder().encode(`\r📥 进度: ${percent}% (${mb} MB / ${totalMb} MB)`));
-        } else {
-          const mb = (downloadedBytes / 1024 / 1024).toFixed(2);
-          Deno.stdout.writeSync(new TextEncoder().encode(`\r📥 已下载: ${mb} MB`));
+        // 确保 value 存在后再写入，避免严格 Null 校验报错
+        if (value) {
+          await file.write(value);
+          downloadedBytes += value.length;
+          
+          if (totalBytes > 0) {
+            const percent = ((downloadedBytes / totalBytes) * 100).toFixed(2);
+            const mb = (downloadedBytes / 1024 / 1024).toFixed(2);
+            const totalMb = (totalBytes / 1024 / 1024).toFixed(2);
+            Deno.stdout.writeSync(new TextEncoder().encode(`\r📥 进度: ${percent}% (${mb} MB / ${totalMb} MB)`));
+          } else {
+            const mb = (downloadedBytes / 1024 / 1024).toFixed(2);
+            Deno.stdout.writeSync(new TextEncoder().encode(`\r📥 已下载: ${mb} MB`));
+          }
         }
       }
     }
     file.close();
     console.log("\n" + pc.green(`✨ 下载并保存成功! 文件路径: ${finalFilename}`));
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(pc.red("\n❌ 执行失败。"));
     if (error instanceof Error) {
       console.error(pc.red("错误详情:"), error.message);
@@ -133,7 +136,8 @@ program
   .version("0.1.0")
   .argument("<image>", "需要下载的镜像名称及版本 (例如: dsxc-park-ioc-all:v0.1.8)")
   .option("-o, --output <filename>", "自定义保存的文件路径/名称")
-  .action((image, options) => {
+  // 显式声明回调参数类型，防止 strict 模式下隐式 any 报错
+  .action((image: string, options: { output?: string }): void => {
     downloadImage(image, options.output);
   });
 
