@@ -1,6 +1,6 @@
 {
   "name": "@xxin/park",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "description": "A command-line tool to download packaged harbor images from city189.cn.",
   "exports": {

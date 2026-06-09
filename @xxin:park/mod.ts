@@ -6,7 +6,7 @@ import process from "node:process";
 
 const program = new Command();
 
-async function downloadImage(imageName: string, outputFilename?: string): Promise<void> {
+async function downloadImage(imageName, outputFilename) {
   const prefix = "local.harbor.com/park-project/";
   
   // 规范化镜像名称：如果用户传入了前缀，先剥离
@@ -46,12 +46,12 @@ async function downloadImage(imageName: string, outputFilename?: string): Promis
     let downloadUrl = "";
     let matchedFilename = "";
 
-    // 2. 尝试从响应头（重定向）或响应体中提取下载地址
+    // 2. 尝试从响应头（重定向）或响应体中提取下载地址，并确保使用 https
     const redirectUrl = response.headers.get("location");
     if (redirectUrl) {
       downloadUrl = redirectUrl.startsWith("http") 
-        ? redirectUrl 
-        : `http://city189.cn:1091${redirectUrl.startsWith("/") ? "" : "/"}${redirectUrl}`;
+        ? redirectUrl.replace(/^http:/i, "https:") // 强制将重定向中的 http:// 协议替换为 https://
+        : `https://city189.cn:1091${redirectUrl.startsWith("/") ? "" : "/"}${redirectUrl}`;
       const filenameMatch = downloadUrl.match(/bundle_[a-f0-9]+\.tar/i);
       if (filenameMatch) {
         matchedFilename = filenameMatch[0];
@@ -61,7 +61,8 @@ async function downloadImage(imageName: string, outputFilename?: string): Promis
       const match = text.match(/bundle_[a-f0-9]+\.tar/i);
       if (match) {
         matchedFilename = match[0];
-        downloadUrl = `http://city189.cn:1091/download/${matchedFilename}`;
+        // 强制使用 https 地址
+        downloadUrl = `https://city189.cn:1091/download/${matchedFilename}`;
       } else {
         console.error(pc.red("❌ 未能在服务器响应中匹配到打包文件名。"));
         console.log(pc.yellow("服务器原始响应如下："));
@@ -73,7 +74,7 @@ async function downloadImage(imageName: string, outputFilename?: string): Promis
     console.log(pc.green(`✅ 打包任务提交成功!`));
     console.log(pc.green(`🔗 下载链接: ${pc.underline(downloadUrl)}`));
 
-    // 3. 执行 GET 请求进行下载
+    // 3. 执行 GET 请求进行下载 (使用 https 下载地址)
     console.log(pc.cyan(`\n📥 开始下载: ${matchedFilename}...`));
     const downloadRes = await fetch(downloadUrl, {
       headers: {
@@ -132,7 +133,7 @@ program
   .version("0.1.0")
   .argument("<image>", "需要下载的镜像名称及版本 (例如: dsxc-park-ioc-all:v0.1.8)")
   .option("-o, --output <filename>", "自定义保存的文件路径/名称")
-  .action((image, options): void => {
+  .action((image, options) => {
     downloadImage(image, options.output);
   });
 
