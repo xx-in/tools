@@ -8,11 +8,7 @@
     "./bin": "./mod.ts"
   },
   "publish": {
-    "include": [
-      "deno.json",
-      "README.md",
-      "mod.ts"
-    ]
+    "include": ["deno.json", "README.md", "mod.ts"]
   },
   "imports": {
     "npm:commander@^11.0.0": "npm:commander@^11.0.0",

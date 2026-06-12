@@ -6,3 +6,4 @@
 
 ```sh
 deno install --global -n park -A -f jsr:@xxin/park/bin
+```

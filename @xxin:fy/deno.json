@@ -8,11 +8,7 @@
     "./bin": "./mod.ts"
   },
   "publish": {
-    "include": [
-      "deno.json",
-      "README.md",
-      "mod.ts"
-    ]
+    "include": ["deno.json", "README.md", "mod.ts"]
   },
   "imports": {
     "node:readline": "node:readline",

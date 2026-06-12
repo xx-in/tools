@@ -20,7 +20,7 @@ function parseIgnoreContent(content: string): string[] {
     .filter((line) => line && !line.startsWith("#"));
 }
 
-// 获取黑名单规则（优先查找源目录，其次查找当前工作目录）
+// 获取黑名单规则（优先查找源目录，其次查找当前工作目录，否则使用默认规则）
 async function getBlacklist(absSrcDir: string): Promise<string[]> {
   const targetIgnorePath = join(absSrcDir, IGNORE_FILE_NAME);
   const cwdIgnorePath = join(Deno.cwd(), IGNORE_FILE_NAME);
@@ -41,12 +41,11 @@ async function getBlacklist(absSrcDir: string): Promise<string[]> {
     return parseIgnoreContent(content);
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
-      // 如果都找不到，则在当前工作目录创建默认规则文件
-      await Deno.writeTextFile(cwdIgnorePath, DEFAULT_BLACKLIST.join("\n") + "\n");
-      console.log(`[cpzip] 未找到忽略文件，已在当前目录下创建默认配置: ${cwdIgnorePath}`);
+      // 未找到任何配置文件，直接应用内置默认规则，不再本地创建文件
+      console.log(`[cpzip] 未找到忽略文件，将直接使用内置默认过滤规则。`);
       return parseIgnoreContent(DEFAULT_BLACKLIST.join("\n"));
     }
-    console.error(`[cpzip] 读取忽略文件失败，使用内置默认规则。`, err);
+    console.error(`[cpzip] 读取忽略文件失败，将使用内置默认规则。`, err);
     return parseIgnoreContent(DEFAULT_BLACKLIST.join("\n"));
   }
 }
@@ -127,7 +126,7 @@ cpzip - 极简的目录复制与打包 ZIP 工具
 
 功能说明:
   1. 运行后会在 [目标目录] 或 [当前工作目录] 寻找并读取 .cpzipignore 文件。
-  2. 如果两个位置都没有该文件，会在当前目录下自动生成默认配置文件（默认忽略 node_modules、.git 等）。
+  2. 如果两个位置都没有该文件，将直接使用内置的默认规则进行过滤（默认忽略 node_modules、.git 等），不再主动生成任何配置文件。
   3. 复制源目录时自动过滤忽略列表中匹配的项目，将其临时存储。
   4. 打包为与目录同名的 ZIP 压缩包，并彻底清理临时工作区。
 `);

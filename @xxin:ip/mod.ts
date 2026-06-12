@@ -34,9 +34,9 @@ function getNonInternalInterfaces(): NetworkInterfaceItem[] {
       const lowerName = name.toLowerCase();
       // 1. 通过网卡名称硬性排除任何形式的回环设备（解决 Windows 回环网卡 internal 未标 true 的问题）
       if (
-        lowerName === "lo" || 
-        lowerName.startsWith("lo") || 
-        lowerName.includes("loopback") || 
+        lowerName === "lo" ||
+        lowerName.startsWith("lo") ||
+        lowerName.includes("loopback") ||
         lowerName.includes("回环")
       ) {
         continue;
@@ -48,10 +48,10 @@ function getNonInternalInterfaces(): NetworkInterfaceItem[] {
       for (const net of netList) {
         // 2. 排除标为 internal 的网卡
         if (net.internal) continue;
-        
+
         // 3. 排除本地回环 IP 地址
         if (net.address === "127.0.0.1" || net.address === "::1") continue;
-        
+
         // 4. 排除未分配的空地址
         if (net.address === "0.0.0.0") continue;
 
@@ -69,7 +69,11 @@ function ipInSubnet(ip: string, target: string, netmask: string): boolean {
   const targetParts = target.split(".").map(Number);
   const maskParts = netmask.split(".").map(Number);
 
-  if (ipParts.length !== 4 || targetParts.length !== 4 || maskParts.length !== 4) {
+  if (
+    ipParts.length !== 4 ||
+    targetParts.length !== 4 ||
+    maskParts.length !== 4
+  ) {
     return false;
   }
 
@@ -82,7 +86,10 @@ function ipInSubnet(ip: string, target: string, netmask: string): boolean {
 }
 
 // 通过 UDP 连接探测本地路由出口 IP（免流量，免握手，支持离线路由探测）
-function getActiveIpViaUdp(dest: string, family: "udp4" | "udp6"): Promise<string> {
+function getActiveIpViaUdp(
+  dest: string,
+  family: "udp4" | "udp6",
+): Promise<string> {
   return new Promise((resolve, reject) => {
     let socket: dgram.Socket;
     try {
@@ -110,22 +117,45 @@ function getActiveIpViaUdp(dest: string, family: "udp4" | "udp6"): Promise<strin
 }
 
 // 智能选择最可能是物理网卡的设备进行兜底
-function pickBestInterface(interfaces: NetworkInterfaceItem[]): NetworkInterfaceItem | null {
+function pickBestInterface(
+  interfaces: NetworkInterfaceItem[],
+): NetworkInterfaceItem | null {
   if (interfaces.length === 0) return null;
   if (interfaces.length === 1) return interfaces[0];
 
   // 过滤掉已知的虚拟网卡
-  const virtualKeywords = [/virtual/i, /vbox/i, /vmnet/i, /docker/i, /veth/i, /bridge/i, /gif/i, /stf/i, /utun/i, /wsl/i];
-  const physicalList = interfaces.filter(item => {
-    return !virtualKeywords.some(regex => regex.test(item.name));
+  const virtualKeywords = [
+    /virtual/i,
+    /vbox/i,
+    /vmnet/i,
+    /docker/i,
+    /veth/i,
+    /bridge/i,
+    /gif/i,
+    /stf/i,
+    /utun/i,
+    /wsl/i,
+  ];
+  const physicalList = interfaces.filter((item) => {
+    return !virtualKeywords.some((regex) => regex.test(item.name));
   });
 
   if (physicalList.length > 0) {
     // 优先匹配物理网卡和无线网卡名称
-    const priorityKeywords = [/en[0-9]/i, /eth[0-9]/i, /wlan[0-9]/i, /wlp/i, /wi-fi/i, /ethernet/i, /lan/i, /以太网/i, /无线/i];
+    const priorityKeywords = [
+      /en[0-9]/i,
+      /eth[0-9]/i,
+      /wlan[0-9]/i,
+      /wlp/i,
+      /wi-fi/i,
+      /ethernet/i,
+      /lan/i,
+      /以太网/i,
+      /无线/i,
+    ];
     physicalList.sort((a, b) => {
-      const aMatch = priorityKeywords.findIndex(regex => regex.test(a.name));
-      const bMatch = priorityKeywords.findIndex(regex => regex.test(b.name));
+      const aMatch = priorityKeywords.findIndex((regex) => regex.test(a.name));
+      const bMatch = priorityKeywords.findIndex((regex) => regex.test(b.name));
       if (aMatch !== -1 && bMatch === -1) return -1;
       if (bMatch !== -1 && aMatch === -1) return 1;
       if (aMatch !== -1 && bMatch !== -1) return aMatch - bMatch;
@@ -176,7 +206,7 @@ async function getActiveInterface(gateway?: string): Promise<ActiveInterface> {
         const conn = await Deno.connect({
           hostname: "114.114.114.114",
           port: 53,
-          transport: "tcp"
+          transport: "tcp",
         });
         if (conn.localAddr && "hostname" in conn.localAddr) {
           activeIp = conn.localAddr.hostname;
@@ -189,7 +219,12 @@ async function getActiveInterface(gateway?: string): Promise<ActiveInterface> {
   }
 
   // 若成功获取到有效的非回环 IP，在网卡候选列表中进行匹配
-  if (activeIp && activeIp !== "127.0.0.1" && activeIp !== "::1" && activeIp !== "0.0.0.0") {
+  if (
+    activeIp &&
+    activeIp !== "127.0.0.1" &&
+    activeIp !== "::1" &&
+    activeIp !== "0.0.0.0"
+  ) {
     for (const item of nonInternal) {
       if (item.info.address === activeIp) {
         return {
@@ -283,14 +318,24 @@ async function main(): Promise<void> {
 
     const activeNet = await getActiveInterface(gateway);
 
-    console.log(pc.cyan("================ 活跃网卡及网关信息 ================"));
-    console.log(`${pc.green("网卡名称 (Name):")}   ${pc.bold(activeNet.interfaceName)}`);
-    console.log(`${pc.green("本机 IP 地址 (IP):")}  ${pc.bold(activeNet.address)}`);
+    console.log(
+      pc.cyan("================ 活跃网卡及网关信息 ================"),
+    );
+    console.log(
+      `${pc.green("网卡名称 (Name):")}   ${pc.bold(activeNet.interfaceName)}`,
+    );
+    console.log(
+      `${pc.green("本机 IP 地址 (IP):")}  ${pc.bold(activeNet.address)}`,
+    );
     console.log(`${pc.green("子网掩码 (Mask):")}   ${activeNet.netmask}`);
-    console.log(`${pc.green("默认网关 (Gateway):")} ${pc.yellow(gateway || `未检测到 (原因: ${gatewayError})`)}`);
+    console.log(
+      `${pc.green("默认网关 (Gateway):")} ${pc.yellow(gateway || `未检测到 (原因: ${gatewayError})`)}`,
+    );
     console.log(`${pc.green("MAC 地址 (MAC):")}    ${activeNet.mac}`);
     console.log(`${pc.green("IP 协议版本:")}       ${activeNet.family}`);
-    console.log(pc.cyan("===================================================="));
+    console.log(
+      pc.cyan("===================================================="),
+    );
   } catch (error) {
     console.error(pc.red("❌ 检测失败。"));
     if (error instanceof Error) {

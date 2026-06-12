@@ -1,6 +1,6 @@
 {
   "name": "@xxin/park",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "license": "MIT",
   "description": "A command-line tool to download packaged harbor images from city189.cn.",
   "exports": {
@@ -8,11 +8,7 @@
     "./bin": "./mod.ts"
   },
   "publish": {
-    "include": [
-      "deno.json",
-      "README.md",
-      "mod.ts"
-    ]
+    "include": ["deno.json", "README.md", "mod.ts"]
   },
   "imports": {
     "npm:commander@^11.0.0": "npm:commander@^11.0.0",

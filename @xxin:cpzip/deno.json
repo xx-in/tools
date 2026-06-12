@@ -1,6 +1,6 @@
 {
   "name": "@xxin/cpzip",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "MIT",
   "description": "A command-line tool for copying directories and creating ZIP archives.",
   "exports": {
@@ -8,13 +8,7 @@
     "./bin": "./mod.ts"
   },
   "publish": {
-    "include": [
-      "deno.json",
-      "README.md",
-      "mod.ts",
-      ".cpzipignore"
-    ]
+    "include": ["deno.json", "README.md", "mod.ts", ".cpzipignore"]
   },
-  "imports": {
-  }
+  "imports": {}
 }
