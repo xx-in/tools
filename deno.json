@@ -1,0 +1,13 @@
+{
+  "name": "@xxin/park",
+  "version": "0.0.1",
+  "license": "MIT",
+  "description": "A command-line tool to run in any system",
+  "exports": {
+    ".": "./mod.ts",
+    "./bin": "./mod.ts"
+  },
+  "publish": {
+    "include": ["deno.json", "README.md", "mod.ts", "commands/"]
+  }
+}

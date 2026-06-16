@@ -1,0 +1,111 @@
+import { Command } from "npm:commander@^11.0.0";
+import pc from "npm:picocolors@^1.0.0";
+import { resolve, join } from "jsr:@std/path@^1.0.0";
+// 👈 使用具名导入 getFileInfo, resolveConfig, format
+import { getFileInfo, resolveConfig, format } from "npm:prettier@^3.0.0";
+
+// 递归获取所有文件路径（过滤常见无需遍历的文件夹）
+async function getFilesRecursively(dirPath: string): Promise<string[]> {
+  const files: string[] = [];
+  const entries = await Deno.readDir(dirPath);
+
+  for await (const entry of entries) {
+    const fullPath = join(dirPath, entry.name);
+    if (
+      entry.name === "node_modules" ||
+      entry.name === ".git" ||
+      entry.name === "dist"
+    ) {
+      continue;
+    }
+
+    if (entry.isDirectory) {
+      files.push(...(await getFilesRecursively(fullPath)));
+    } else if (entry.isFile) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
+export function registerFormatCommand(program: Command) {
+  program
+    .command("format [path]")
+    .description("使用 Prettier 自动格式化代码文件或目录中的所有文件")
+    .action(async (targetPath: string | undefined) => {
+      const inputPath = targetPath || ".";
+      const absolutePath = resolve(Deno.cwd(), inputPath);
+
+      let targetFiles: string[] = [];
+
+      try {
+        const stat = await Deno.stat(absolutePath);
+        if (stat.isDirectory) {
+          console.log(pc.cyan(`🔍 正在扫描目录中的文件: ${absolutePath}...`));
+          targetFiles = await getFilesRecursively(absolutePath);
+        } else if (stat.isFile) {
+          targetFiles = [absolutePath];
+        }
+      } catch {
+        console.error(pc.red(`❌ 错误: 找不到指定的路径 '${inputPath}'。`));
+        return;
+      }
+
+      if (targetFiles.length === 0) {
+        console.log(pc.yellow("⚠️ 未找到任何可供格式化的文件。"));
+        return;
+      }
+
+      console.log(
+        pc.cyan(`✨ 开始使用 Prettier 格式化 ${targetFiles.length} 个文件...`),
+      );
+      let successCount = 0;
+      let errorCount = 0;
+      let ignoredCount = 0;
+
+      for (const filePath of targetFiles) {
+        try {
+          // 1. 利用 Prettier API getFileInfo 判断文件是否被忽略或不被支持
+          const fileInfo = await getFileInfo(filePath); // 👈 修复为 getFileInfo
+          if (!fileInfo || fileInfo.ignored || !fileInfo.inferredParser) {
+            ignoredCount++;
+            continue;
+          }
+
+          // 2. 读取源文件
+          const content = await Deno.readTextFile(filePath);
+
+          // 3. 尝试解析当前文件适用的本地 Prettier 配置文件 (e.g. .prettierrc)
+          const config = (await resolveConfig(filePath)) || {}; // 👈 直接调用 resolveConfig
+
+          // 4. 执行格式化
+          const formatted = await format(content, {
+            // 👈 直接调用 format
+            ...config,
+            filepath: filePath, // 关键：指定 filepath 以便 Prettier 自动加载对应的 Parser
+          });
+
+          // 5. 若有改动则写回文件
+          if (content !== formatted) {
+            await Deno.writeTextFile(filePath, formatted);
+            console.log(pc.green(`✔ 已格式化: ${filePath}`));
+          } else {
+            console.log(pc.dim(`➖ 无需修改: ${filePath}`));
+          }
+          successCount++;
+        } catch (err) {
+          errorCount++;
+          console.error(
+            pc.red(`❌ 格式化失败 [${filePath}]:`),
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+
+      console.log(
+        pc.cyan(
+          `\n🏁 格式化流程结束! 成功: ${pc.bold(successCount)} 个, 忽略/不适配: ${pc.bold(ignoredCount)} 个, 失败: ${pc.bold(errorCount)} 个。`,
+        ),
+      );
+    });
+}

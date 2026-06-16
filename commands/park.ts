@@ -1,11 +1,7 @@
-#!/usr/bin/env deno
-
 import { Command } from "npm:commander@^11.0.0";
 import pc from "npm:picocolors@^1.0.0";
-import process from "node:process";
 import { join, isAbsolute, resolve, dirname } from "jsr:@std/path@^1.0.0";
 
-const program = new Command();
 const CONFIG_FILE_NAME = ".park_config.json";
 
 interface Config {
@@ -137,10 +133,8 @@ async function downloadImage(
     // 4. 解析目标下载目录
     let downloadDir: string;
     if (targetDir) {
-      // 传入了临时目录参数，支持各种相对路径（如 ./、../ 等）或绝对路径
       downloadDir = resolve(Deno.cwd(), targetDir);
     } else {
-      // 未传入临时目录，尝试读取全局配置，如果未配置则默认当前工作目录 (CWD)
       const config = await readConfig();
       downloadDir = config.defaultDownloadDir
         ? config.defaultDownloadDir
@@ -204,42 +198,38 @@ async function downloadImage(
   }
 }
 
-program
-  .name("park")
-  .description("City189 Harbor 离线打包镜像下载工具")
-  .version("0.1.2")
-  .argument(
-    "[image]",
-    "需要下载的镜像名称及版本 (例如: dsxc-park-ioc-all:v0.1.8)",
-  )
-  .option(
-    "-d, --dir <directory>",
-    "指定本次下载保存的目录路径 (支持相对路径如 ./ 、../ 或绝对路径)",
-  )
-  .option("-o, --output <filename>", "自定义保存的文件名")
-  .option("-g, --global <path>", "配置全局默认下载目录")
-  .action(
-    async (
-      image: string | undefined,
-      options: { output?: string; dir?: string; global?: string },
-    ): Promise<void> => {
-      // 1. 如果用户输入了全局配置选项，保存后直接退出
-      if (options.global) {
-        const absPath = resolve(Deno.cwd(), options.global);
-        await writeConfig({ defaultDownloadDir: absPath });
-        console.log(pc.green(`✨ 已成功设置全局默认下载目录为: ${absPath}`));
-        Deno.exit(0);
-      }
+export function registerParkCommand(program: Command) {
+  program
+    .command("park [image]")
+    .description("园区离线打包镜像下载工具")
+    .option(
+      "-d, --dir <directory>",
+      "指定本次下载保存的目录路径 (支持相对路径如 ./ 、../ 或绝对路径)",
+    )
+    .option("-o, --output <filename>", "自定义保存的文件名")
+    .option("-g, --global <path>", "配置全局默认下载目录")
+    .action(
+      async (
+        image: string | undefined,
+        options: { output?: string; dir?: string; global?: string },
+        cmd: Command,
+      ): Promise<void> => {
+        // 1. 设置全局默认下载目录
+        if (options.global) {
+          const absPath = resolve(Deno.cwd(), options.global);
+          await writeConfig({ defaultDownloadDir: absPath });
+          console.log(pc.green(`✨ 已成功设置全局默认下载目录为: ${absPath}`));
+          return;
+        }
 
-      // 2. 正常下载逻辑，校验是否传入了镜像参数
-      if (!image) {
-        console.error(pc.red("❌ 错误: 未指定需要下载的镜像名称。"));
-        program.outputHelp();
-        Deno.exit(1);
-      }
+        // 2. 正常下载逻辑，校验是否传入了镜像参数
+        if (!image) {
+          console.error(pc.red("❌ 错误: 未指定需要下载的镜像名称。"));
+          cmd.outputHelp();
+          return;
+        }
 
-      await downloadImage(image, options.output, options.dir);
-    },
-  );
-
-program.parse(process.argv);
+        await downloadImage(image, options.output, options.dir);
+      },
+    );
+}

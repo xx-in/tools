@@ -1,7 +1,0 @@
-# cpzip 忽略配置文件
-# 支持文件夹名、文件名、以及带有 *.ext 后缀的通配符
-node_modules
-.git
-.DS_Store
-dist
-*.zip

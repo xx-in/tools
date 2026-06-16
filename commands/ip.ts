@@ -1,12 +1,7 @@
-#!/usr/bin/env deno
-
-import os from "node:os";
-import dgram from "node:dgram";
 import { Command } from "npm:commander@^11.0.0";
 import pc from "npm:picocolors@^1.0.0";
-import process from "node:process";
-
-const program = new Command();
+import os from "node:os";
+import dgram from "node:dgram";
 
 // 网卡信息接口
 interface ActiveInterface {
@@ -32,7 +27,6 @@ function getNonInternalInterfaces(): NetworkInterfaceItem[] {
   if (interfaces) {
     for (const name of Object.keys(interfaces)) {
       const lowerName = name.toLowerCase();
-      // 1. 通过网卡名称硬性排除任何形式的回环设备（解决 Windows 回环网卡 internal 未标 true 的问题）
       if (
         lowerName === "lo" ||
         lowerName.startsWith("lo") ||
@@ -46,13 +40,8 @@ function getNonInternalInterfaces(): NetworkInterfaceItem[] {
       if (!netList) continue;
 
       for (const net of netList) {
-        // 2. 排除标为 internal 的网卡
         if (net.internal) continue;
-
-        // 3. 排除本地回环 IP 地址
         if (net.address === "127.0.0.1" || net.address === "::1") continue;
-
-        // 4. 排除未分配的空地址
         if (net.address === "0.0.0.0") continue;
 
         list.push({ name, info: net });
@@ -85,7 +74,7 @@ function ipInSubnet(ip: string, target: string, netmask: string): boolean {
   return true;
 }
 
-// 通过 UDP 连接探测本地路由出口 IP（免流量，免握手，支持离线路由探测）
+// 通过 UDP 连接探测本地路由出口 IP
 function getActiveIpViaUdp(
   dest: string,
   family: "udp4" | "udp6",
@@ -116,14 +105,13 @@ function getActiveIpViaUdp(
   });
 }
 
-// 智能选择最可能是物理网卡的设备进行兜底
+// 智能选择物理网卡
 function pickBestInterface(
   interfaces: NetworkInterfaceItem[],
 ): NetworkInterfaceItem | null {
   if (interfaces.length === 0) return null;
   if (interfaces.length === 1) return interfaces[0];
 
-  // 过滤掉已知的虚拟网卡
   const virtualKeywords = [
     /virtual/i,
     /vbox/i,
@@ -141,7 +129,6 @@ function pickBestInterface(
   });
 
   if (physicalList.length > 0) {
-    // 优先匹配物理网卡和无线网卡名称
     const priorityKeywords = [
       /en[0-9]/i,
       /eth[0-9]/i,
@@ -175,7 +162,6 @@ async function getActiveInterface(gateway?: string): Promise<ActiveInterface> {
     throw new Error("未找到任何可用的非本地回环网卡。");
   }
 
-  // 1. 优先采用默认网关进行子网段匹配 (IPv4)
   if (gateway && gateway.match(/^\d+\.\d+\.\d+\.\d+$/)) {
     for (const item of nonInternal) {
       if (item.info.family === "IPv4" || String(item.info.family) === "4") {
@@ -194,7 +180,6 @@ async function getActiveInterface(gateway?: string): Promise<ActiveInterface> {
     }
   }
 
-  // 2. 尝试通过 UDP 路由机制探测出口 IP
   let activeIp = "";
   try {
     activeIp = await getActiveIpViaUdp("8.8.8.8", "udp4");
@@ -213,12 +198,11 @@ async function getActiveInterface(gateway?: string): Promise<ActiveInterface> {
         }
         conn.close();
       } catch (_tcperr) {
-        // 忽略，交由后面的物理网卡推荐算法兜底
+        // 忽略异常，由下方的 pickBestInterface 兜底
       }
     }
   }
 
-  // 若成功获取到有效的非回环 IP，在网卡候选列表中进行匹配
   if (
     activeIp &&
     activeIp !== "127.0.0.1" &&
@@ -240,7 +224,6 @@ async function getActiveInterface(gateway?: string): Promise<ActiveInterface> {
     }
   }
 
-  // 3. 兜底方案：通过特征选择最合适的物理网卡
   const best = pickBestInterface(nonInternal);
   if (best) {
     return {
@@ -265,7 +248,6 @@ async function getDefaultGateway(): Promise<string> {
 
   if (platform === "windows") {
     cmd = "powershell";
-    // 添加 -NoProfile 避免加载用户配置文件输出环境相关的干扰文本
     args = [
       "-NoProfile",
       "-Command",
@@ -303,53 +285,48 @@ async function getDefaultGateway(): Promise<string> {
   return firstLine ? firstLine.trim() : "";
 }
 
-// 主执行逻辑
-async function main(): Promise<void> {
-  console.log(pc.dim("正在分析网络配置，请稍候...\n"));
-  try {
-    let gateway = "";
-    let gatewayError = "";
+// 注册 ip 子命令
+export function registerIpCommand(program: Command) {
+  program
+    .command("ip")
+    .description("本地活跃网卡、本机IP及网关侦测工具")
+    .action(async (): Promise<void> => {
+      console.log(pc.dim("正在分析网络配置，请稍候...\n"));
+      try {
+        let gateway = "";
+        let gatewayError = "";
 
-    try {
-      gateway = await getDefaultGateway();
-    } catch (err) {
-      gatewayError = err instanceof Error ? err.message : String(err);
-    }
+        try {
+          gateway = await getDefaultGateway();
+        } catch (err) {
+          gatewayError = err instanceof Error ? err.message : String(err);
+        }
 
-    const activeNet = await getActiveInterface(gateway);
+        const activeNet = await getActiveInterface(gateway);
 
-    console.log(
-      pc.cyan("================ 活跃网卡及网关信息 ================"),
-    );
-    console.log(
-      `${pc.green("网卡名称 (Name):")}   ${pc.bold(activeNet.interfaceName)}`,
-    );
-    console.log(
-      `${pc.green("本机 IP 地址 (IP):")}  ${pc.bold(activeNet.address)}`,
-    );
-    console.log(`${pc.green("子网掩码 (Mask):")}   ${activeNet.netmask}`);
-    console.log(
-      `${pc.green("默认网关 (Gateway):")} ${pc.yellow(gateway || `未检测到 (原因: ${gatewayError})`)}`,
-    );
-    console.log(`${pc.green("MAC 地址 (MAC):")}    ${activeNet.mac}`);
-    console.log(`${pc.green("IP 协议版本:")}       ${activeNet.family}`);
-    console.log(
-      pc.cyan("===================================================="),
-    );
-  } catch (error) {
-    console.error(pc.red("❌ 检测失败。"));
-    if (error instanceof Error) {
-      console.error(pc.red("错误详情:"), error.message);
-    }
-  }
+        console.log(
+          pc.cyan("================ 活跃网卡及网关信息 ================"),
+        );
+        console.log(
+          `${pc.green("网卡名称 (Name):")}   ${pc.bold(activeNet.interfaceName)}`,
+        );
+        console.log(
+          `${pc.green("本机 IP 地址 (IP):")}  ${pc.bold(activeNet.address)}`,
+        );
+        console.log(`${pc.green("子网掩码 (Mask):")}   ${activeNet.netmask}`);
+        console.log(
+          `${pc.green("默认网关 (Gateway):")} ${pc.yellow(gateway || `未检测到 (原因: ${gatewayError})`)}`,
+        );
+        console.log(`${pc.green("MAC 地址 (MAC):")}    ${activeNet.mac}`);
+        console.log(`${pc.green("IP 协议版本:")}       ${activeNet.family}`);
+        console.log(
+          pc.cyan("===================================================="),
+        );
+      } catch (error) {
+        console.error(pc.red("❌ 检测失败。"));
+        if (error instanceof Error) {
+          console.error(pc.red("错误详情:"), error.message);
+        }
+      }
+    });
 }
-
-program
-  .name("netstat")
-  .description("本地活跃网卡及网关侦测工具")
-  .version("1.0.5")
-  .action((): void => {
-    main();
-  });
-
-program.parse(process.argv);
