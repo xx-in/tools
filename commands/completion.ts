@@ -2,7 +2,7 @@ import { Command } from "npm:commander@^11.0.0";
 import pc from "npm:picocolors@^1.0.0";
 import { join } from "jsr:@std/path@^1.0.0";
 
-// --- Zsh 补全脚本模板 (完全去除了合并分支，严格按 A-Z 单项排序) ---
+// --- Zsh 补全脚本模板 (无缩写，严格按 A-Z 单项排序) ---
 const ZSH_SCRIPT = `
 #compdef xx
 
@@ -29,7 +29,7 @@ _xx() {
         'move:移动或重命名文件及目录'
         'open:在系统文件管理器中打开指定目录'
         'park:City189 Harbor 离线打包镜像下载工具'
-        'remove:递归删除文件或目录（需确认提示）'
+        'remove:安全地将指定的文件或目录移至系统回收站（支持通配符及多选）'
         'translate:终端翻译工具'
         'unzip:解压 ZIP 压缩包'
         'upgrade:自动更新 xx 命令行工具至最新版本'
@@ -70,7 +70,7 @@ _xx() {
             'move:移动或重命名文件及目录'
             'open:在系统文件管理器中打开指定目录'
             'park:City189 Harbor 离线打包镜像下载工具'
-            'remove:递归删除文件或目录（需确认提示）'
+            'remove:安全地将指定的文件或目录移至系统回收站（支持通配符及多选）'
             'translate:终端翻译工具'
             'unzip:解压 ZIP 压缩包'
             'upgrade:自动更新 xx 命令行工具至最新版本'
@@ -124,7 +124,7 @@ _xx() {
 compdef _xx xx
 `;
 
-// --- Bash 补全脚本模板 (按 A-Z 重新排序，增加 application 支持) ---
+// --- Bash 补全脚本模板 (已补齐 -o default 和 -o bashdefault 文件路径回退标志) ---
 const BASH_SCRIPT = `
 _xx_completion() {
     local cur prev opts
@@ -168,10 +168,10 @@ _xx_completion() {
             ;;
     esac
 }
-complete -F _xx_completion xx
+complete -o default -o bashdefault -F _xx_completion xx
 `;
 
-// --- PowerShell 补全脚本模板 (按 A-Z 重新排序，增加 application 支持) ---
+// --- PowerShell 补全脚本模板 ---
 const POWERSHELL_SCRIPT = `
 $xx_completer = {
     param($wordToComplete, $commandAst, $cursorPosition)
