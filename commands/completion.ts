@@ -2,7 +2,7 @@ import { Command } from "npm:commander@^11.0.0";
 import pc from "npm:picocolors@^1.0.0";
 import { join } from "jsr:@std/path@^1.0.0";
 
-// --- Zsh 补全脚本模板 (无缩写，严格按 A-Z 单项排序) ---
+// --- Zsh 补全脚本模板 ---
 const ZSH_SCRIPT = `
 #compdef xx
 
@@ -10,11 +10,11 @@ _xx() {
   local context state state_descr line
   typeset -A opt_args
 
-  _arguments -C \
-    '1:Cmd:->command' \
+  _arguments -C \\
+    '1:Cmd:->command' \\
     '*::SubCmd:->args'
 
-  case $state in
+  case \$state in
     command)
       local -a subcommands
       subcommands=(
@@ -38,23 +38,37 @@ _xx() {
       _describe -t subcommands 'xx commands' subcommands
       ;;
     args)
-      case $line[1] in
+      case \$line[1] in
         application)
-          _arguments \\
-            '1:SubCmd:(shortcut install remove)' \\
-            '*:Args:_files'
+          case \$words[CURRENT-1] in
+            shortcut|install)
+              _files
+              ;;
+            remove)
+              _files -g "*.deb"
+              ;;
+            *)
+              local -a sub_subcommands
+              sub_subcommands=(
+                'shortcut:为 AppImage、Flatpak ID 或二进制文件创建 Linux 桌面快捷方式'
+                'install:安装软件（支持本地 .deb 或 .tar.gz）'
+                'remove:卸载 DEB 软件包'
+              )
+              _describe -t sub_subcommands 'application subcommands' sub_subcommands
+              ;;
+          esac
           ;;
         copy)
-          _arguments \
-            '1:Source:_files' \
+          _arguments \\
+            '1:Source:_files' \\
             '2:Target:_files'
           ;;
         create)
-          _arguments \
+          _arguments \\
             '*:Target Path:_files'
           ;;
         format)
-          _arguments \
+          _arguments \\
             '*:Target Path:_files'
           ;;
         help)
@@ -79,41 +93,41 @@ _xx() {
           _describe -t sub_cmds 'xx commands' sub_cmds
           ;;
         list)
-          _arguments \
+          _arguments \\
             '*:Target Path:_files -/'
           ;;
         move)
-          _arguments \
-            '1:Source:_files' \
+          _arguments \\
+            '1:Source:_files' \\
             '2:Target:_files'
           ;;
         open)
-          _arguments \
+          _arguments \\
             '*:Target Path:_files -/'
           ;;
         park)
-          _arguments \
-            '-d[指定本次下载保存的目录路径]:directory:_files -/' \
-            '-o[自定义保存的文件名]:filename:_files' \
-            '-g[配置全局默认下载目录]:directory:_files -/' \
+          _arguments \\
+            '-d[指定本次下载保存的目录路径]:directory:_files -/' \\
+            '-o[自定义保存的文件名]:filename:_files' \\
+            '-g[配置全局默认下载目录]:directory:_files -/' \\
             '*:Image Name:'
           ;;
         remove)
-          _arguments \
+          _arguments \\
             '*:Target Path:_files'
           ;;
         translate)
-          _arguments \
-            '-t[指定目标语言 (默认 auto)]' \
+          _arguments \\
+            '-t[指定目标语言 (默认 auto)]' \\
             '*:Text:'
           ;;
         unzip)
-          _arguments \
-            '-d[指定解压到的目标目录路径]:directory:_files -/' \
+          _arguments \\
+            '-d[指定解压到的目标目录路径]:directory:_files -/' \\
             '*:Zip File:_files -g "*.zip"'
           ;;
         zip)
-          _arguments \
+          _arguments \\
             '*:Target Path:_files'
           ;;
       esac
@@ -124,7 +138,7 @@ _xx() {
 compdef _xx xx
 `;
 
-// --- Bash 补全脚本模板 (已补齐 -o default 和 -o bashdefault 文件路径回退标志) ---
+// --- Bash 补全脚本模板 ---
 const BASH_SCRIPT = `
 _xx_completion() {
     local cur prev opts
@@ -133,16 +147,22 @@ _xx_completion() {
     prev="\${COMP_WORDS[COMP_CWORD-1]}"
     opts="application completion copy create format help ip list move open park remove translate unzip upgrade zip"
 
+    # 1. 第一级命令补全
     if [[ \${COMP_CWORD} -eq 1 ]] ; then
         COMPREPLY=( \$(compgen -W "\${opts}" -- \${cur}) )
         return 0
     fi
 
+    # 2. 精准匹配二级及后续命令的参数补全
     case "\${COMP_WORDS[1]}" in
         application)
             if [[ \${COMP_CWORD} -eq 2 ]] ; then
                 local sub_opts="shortcut install remove"
                 COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
+                return 0
+            elif [[ \${COMP_CWORD} -ge 3 ]] ; then
+                # 👈 显式生成：解决 Fedora/RHEL 对空返回 Fallback 进行全局拦截的问题
+                COMPREPLY=( \$(compgen -f -- "\${cur}") )
                 return 0
             fi
             ;;
@@ -167,40 +187,44 @@ _xx_completion() {
             return 0
             ;;
     esac
+
+    # 3. 终极兜底：对于未单独走 case 逻辑的命令 (如 copy, create, list, format, remove 等需要本地文件/目录参与的命令)
+    # 直接在脚本中由代码显式调用并生成补全结果，杜绝任何系统级拦截
+    COMPREPLY=( \$(compgen -f -- "\${cur}") )
 }
-complete -o default -o bashdefault -F _xx_completion xx
+complete -o filenames -o default -o bashdefault -F _xx_completion xx
 `;
 
 // --- PowerShell 补全脚本模板 ---
 const POWERSHELL_SCRIPT = `
-$xx_completer = {
-    param($wordToComplete, $commandAst, $cursorPosition)
-    $commands = @("application", "completion", "copy", "create", "format", "help", "ip", "list", "move", "open", "park", "remove", "translate", "unzip", "upgrade", "zip")
-    $sub_opts = @{
+\$xx_completer = {
+    param(\$wordToComplete, \$commandAst, \$cursorPosition)
+    \$commands = @("application", "completion", "copy", "create", "format", "help", "ip", "list", "move", "open", "park", "remove", "translate", "unzip", "upgrade", "zip")
+    \$sub_opts = @{
         "application" = @("shortcut", "install", "remove")
         "park" = @("-d", "-o", "-g")
         "unzip" = @("-d")
         "translate" = @("-t")
         "help" = @("application", "completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "remove", "translate", "unzip", "upgrade", "zip")
     }
-    $tokens = $commandAst.Elements | ForEach-Object { $_.Value } | Where-Object { $_ -ne $null }
-    $tokenCount = $tokens.Count
+    \$tokens = \$commandAst.Elements | ForEach-Object { \$_.Value } | Where-Object { \$_ -ne \$null }
+    \$tokenCount = \$tokens.Count
 
-    if ($tokenCount -le 2) {
-        $commands | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
-            [System.Management.Automation.CompletionResult]::new($_, $_, 'Command', $_)
+    if (\$tokenCount -le 2) {
+        \$commands | Where-Object { \$_ -like "\$wordToComplete*" } | ForEach-Object {
+            [System.Management.Automation.CompletionResult]::new(\$_, \$_, 'Command', \$_)
         }
     } else {
-        $subCmd = $tokens[1]
-        if ($sub_opts.ContainsKey($subCmd)) {
-            $opts = $sub_opts[$subCmd]
-            $opts | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
-                [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterName', $_)
+        \$subCmd = \$tokens[1]
+        if (\$sub_opts.ContainsKey(\$subCmd)) {
+            \$opts = \$sub_opts[\$subCmd]
+            \$opts | Where-Object { \$_ -like "\$wordToComplete*" } | ForEach-Object {
+                [System.Management.Automation.CompletionResult]::new(\$_, \$_, 'ParameterName', \$_)
             }
         }
     }
 }
-Register-ArgumentCompleter -CommandName 'xx' -ScriptBlock $xx_completer
+Register-ArgumentCompleter -CommandName 'xx' -ScriptBlock \$xx_completer
 `;
 
 // 自动化安装实现
