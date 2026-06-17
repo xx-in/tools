@@ -2,7 +2,7 @@ import { Command } from "npm:commander@^11.0.0";
 import pc from "npm:picocolors@^1.0.0";
 import { join } from "jsr:@std/path@^1.0.0";
 
-// --- Zsh 补全脚本模板 ---
+// --- Zsh 补全脚本模板 (按 A-Z 排序，整合新增 delete 卸载器) ---
 const ZSH_SCRIPT = `
 #compdef xx
 
@@ -21,6 +21,7 @@ _xx() {
         'completion:自动检测并生成 Shell 补全脚本'
         'copy:复制文件或目录（支持递归复制）'
         'create:递归创建文件或目录'
+        'delete:通用应用卸载器（支持包名、本地包文件、或绿色软件目录名）'
         'format:使用 Prettier 格式化代码'
         'help:显示指定命令的帮助信息'
         'install:自动分发部署安装包 (支持 AppImage、Flatpak ID、tar.gz、deb、rpm)'
@@ -49,6 +50,10 @@ _xx() {
           _arguments \\
             '*:Target Path:_files'
           ;;
+        delete)
+          _arguments \\
+            '*:Package Path:_files'
+          ;;
         format)
           _arguments \\
             '*:Target Path:_files'
@@ -59,6 +64,7 @@ _xx() {
             'completion:自动检测并生成 Shell 补全脚本'
             'copy:复制文件或目录（支持递归复制）'
             'create:递归创建文件或目录'
+            'delete:通用应用卸载器（支持包名、本地包文件、或绿色软件目录名）'
             'format:使用 Prettier 格式化代码'
             'install:自动分发部署安装包 (支持 AppImage、Flatpak ID、tar.gz、deb、rpm)'
             'ip:本地活跃网卡及网关侦测'
@@ -130,14 +136,14 @@ _xx() {
 compdef _xx xx
 `;
 
-// --- Bash 补全脚本模板 ---
+// --- Bash 补全脚本模板 (按 A-Z 重新排序，增加 delete) ---
 const BASH_SCRIPT = `
 _xx_completion() {
     local cur prev opts
     COMPREPLY=()
     cur="\${COMP_WORDS[COMP_CWORD]}"
     prev="\${COMP_WORDS[COMP_CWORD-1]}"
-    opts="completion copy create format help install ip list move open park remove search translate unzip upgrade zip"
+    opts="completion copy create delete format help install ip list move open park remove search translate unzip upgrade zip"
 
     if [[ \${COMP_CWORD} -eq 1 ]] ; then
         COMPREPLY=( \$(compgen -W "\${opts}" -- \${cur}) )
@@ -161,7 +167,7 @@ _xx_completion() {
             return 0
             ;;
         help)
-            local sub_opts="completion copy create format ip list move open park remove search translate unzip upgrade zip"
+            local sub_opts="completion copy create delete format ip list move open park remove search translate unzip upgrade zip"
             COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
             return 0
             ;;
@@ -172,16 +178,16 @@ _xx_completion() {
 complete -o filenames -o default -o bashdefault -F _xx_completion xx
 `;
 
-// --- PowerShell 补全脚本模板 ---
+// --- PowerShell 补全脚本模板 (按 A-Z 重新排序，增加 delete) ---
 const POWERSHELL_SCRIPT = `
 \$xx_completer = {
     param(\$wordToComplete, \$commandAst, \$cursorPosition)
-    \$commands = @("completion", "copy", "create", "format", "help", "install", "ip", "list", "move", "open", "park", "remove", "search", "translate", "unzip", "upgrade", "zip")
+    \$commands = @("completion", "copy", "create", "delete", "format", "help", "install", "ip", "list", "move", "open", "park", "remove", "search", "translate", "unzip", "upgrade", "zip")
     \$sub_opts = @{
         "park" = @("-d", "-o", "-g")
         "unzip" = @("-d")
         "translate" = @("-t")
-        "help" = @("completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "remove", "search", "translate", "unzip", "upgrade", "zip")
+        "help" = @("completion", "copy", "create", "delete", "format", "ip", "list", "move", "open", "park", "remove", "search", "translate", "unzip", "upgrade", "zip")
     }
     \$tokens = \$commandAst.Elements | ForEach-Object { \$_.Value } | Where-Object { \$_ -ne \$null }
     \$tokenCount = \$tokens.Count

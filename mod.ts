@@ -3,13 +3,14 @@
 import { Command } from "npm:commander@^11.0.0";
 import process from "node:process";
 
-// 👈 使用静态 JSON 导入安全、无感地动态读取 deno.json 的配置信息
+// 使用静态 JSON 导入安全地动态读取配置
 import denoConfig from "./deno.json" with { type: "json" };
 
 // --- 按 A-Z 字母顺序导入所有子命令模块 ---
 import { registerCompletionCommand } from "./commands/completion.ts";
 import { registerCopyCommand } from "./commands/copy.ts";
 import { registerCreateCommand } from "./commands/create.ts";
+import { registerDeleteCommand } from "./commands/delete.ts"; // 👈 新增导入
 import { registerFormatCommand } from "./commands/format.ts";
 import { registerInstallCommand } from "./commands/install.ts";
 import { registerIpCommand } from "./commands/ip.ts";
@@ -29,7 +30,6 @@ const program = new Command();
 program
   .name("xx")
   .description("一个实用的多功能系统命令行工具")
-  // 👈 动态使用从 deno.json 读取到的版本号
   .version(denoConfig.version, "-V, --version", "显示版本号")
   .helpOption("-h, --help", "显示命令帮助")
   .addHelpCommand("help [command]", "显示指定命令的帮助信息");
@@ -38,6 +38,7 @@ program
 registerCompletionCommand(program);
 registerCopyCommand(program);
 registerCreateCommand(program);
+registerDeleteCommand(program); // 👈 新增注册
 registerFormatCommand(program);
 registerInstallCommand(program);
 registerIpCommand(program);
