@@ -210,25 +210,31 @@ async function searchDebPackages(query: string): Promise<string[]> {
   return pkgs;
 }
 
+// 智能提取干净的 RPM 软件包名，防止展示版本号、构架名等后缀
 async function searchRpmPackages(query: string): Promise<string[]> {
   const pkgs: string[] = [];
   try {
+    // 👈 核心修复：通过指定 --queryformat '%{NAME}\n'，强制 rpm 只输出纯包名（如 google-chrome-stable）
     const command = new Deno.Command("rpm", {
-      args: ["-qa", `*${query}*`],
+      args: ["-qa", "--queryformat", "%{NAME}\n", `*${query}*`],
     });
     const { success, stdout } = await command.output();
     if (success) {
       const output = new TextDecoder().decode(stdout).trim();
       const lines = output.split("\n");
+
+      // 去重处理，规避因系统中同时存在多个子依赖版本而造成的输出重复
+      const uniquePkgs = new Set<string>();
       for (const line of lines) {
         const name = line.trim();
         if (name) {
-          pkgs.push(name);
+          uniquePkgs.add(name);
         }
       }
+      pkgs.push(...uniquePkgs);
     }
   } catch {
-    /* ignore */
+    // ignore
   }
   return pkgs;
 }
@@ -346,7 +352,6 @@ async function performRemoveGreenApp(greenPath: string, appName: string) {
 
 // 模糊检索与卸载推荐系统
 async function performFuzzySearchAndRecommendation(query: string) {
-  // 👈 核心修复一：在并发前执行 await 提取hasSnap，消除 Promise 裸值判断
   const hasSnap = await isCommandAvailable("snap");
 
   const [greenCands, flatpakCands, snapCands] = await Promise.all([
@@ -438,8 +443,9 @@ async function performFuzzySearchAndRecommendation(query: string) {
   }
 }
 
-// 👈 核心修复二：重构为规范的可辨识联合类型体，自动完成类型收窄，完美解决 JSR 编译期 never 检查问题
-async function parseDeleteTarget(target: string): Promise<
+async function parseDeleteTarget(
+  target: string,
+): Promise<
   | { type: "green"; raw: string; greenPath: string }
   | { type: "flatpak"; raw: string }
   | { type: "snap"; raw: string }
@@ -543,7 +549,6 @@ export function registerDeleteCommand(program: Command) {
 
         switch (parsed.type) {
           case "green":
-            // 👈 联合类型已完美自动收窄，无需非空断言 !
             await performRemoveGreenApp(parsed.greenPath, parsed.raw);
             console.log(pc.green("✨ 绿色应用及桌面快捷方式清理完成！"));
             break;
@@ -587,7 +592,6 @@ export function registerDeleteCommand(program: Command) {
             break;
 
           default: {
-            // 👈 穷尽性安全检查，类型无缝契合 never 校验
             const _exhaustiveCheck: never = parsed;
             throw new Error(
               `未处理的卸载分支类型: ${JSON.stringify(_exhaustiveCheck)}`,
