@@ -18,18 +18,19 @@ _xx() {
     command)
       local -a subcommands
       subcommands=(
-        'application:Linux 桌面应用辅助管理工具 (快捷方式、包安装及卸载)'
         'completion:自动检测并生成 Shell 补全脚本'
         'copy:复制文件或目录（支持递归复制）'
         'create:递归创建文件或目录'
         'format:使用 Prettier 格式化代码'
         'help:显示指定命令的帮助信息'
+        'install:自动分发部署安装包 (支持 AppImage、Flatpak ID、tar.gz、deb、rpm)'
         'ip:本地活跃网卡及网关侦测'
         'list:列出目录中的所有文件和目录（含隐藏项）'
         'move:移动或重命名文件及目录'
         'open:在系统文件管理器中打开指定目录'
         'park:City189 Harbor 离线打包镜像下载工具'
         'remove:安全地将指定的文件或目录移至系统回收站（支持通配符及多选）'
+        'search:递归搜索目录下包含指定关键词的文件或目录'
         'translate:终端翻译工具'
         'unzip:解压 ZIP 压缩包'
         'upgrade:自动更新 xx 命令行工具至最新版本'
@@ -39,25 +40,6 @@ _xx() {
       ;;
     args)
       case \$line[1] in
-        application)
-          case \$words[CURRENT-1] in
-            shortcut|install)
-              _files
-              ;;
-            remove)
-              _files -g "*.deb"
-              ;;
-            *)
-              local -a sub_subcommands
-              sub_subcommands=(
-                'shortcut:为 AppImage、Flatpak ID 或二进制文件创建 Linux 桌面快捷方式'
-                'install:安装软件（支持本地 .deb 或 .tar.gz）'
-                'remove:卸载 DEB 软件包'
-              )
-              _describe -t sub_subcommands 'application subcommands' sub_subcommands
-              ;;
-          esac
-          ;;
         copy)
           _arguments \\
             '1:Source:_files' \\
@@ -74,23 +56,28 @@ _xx() {
         help)
           local -a sub_cmds
           sub_cmds=(
-            'application:Linux 桌面应用辅助管理工具 (快捷方式、包安装及卸载)'
             'completion:自动检测并生成 Shell 补全脚本'
             'copy:复制文件或目录（支持递归复制）'
             'create:递归创建文件或目录'
             'format:使用 Prettier 格式化代码'
+            'install:自动分发部署安装包 (支持 AppImage、Flatpak ID、tar.gz、deb、rpm)'
             'ip:本地活跃网卡及网关侦测'
             'list:列出目录中的所有文件和目录（含隐藏项）'
             'move:移动或重命名文件及目录'
             'open:在系统文件管理器中打开指定目录'
             'park:City189 Harbor 离线打包镜像下载工具'
             'remove:安全地将指定的文件或目录移至系统回收站（支持通配符及多选）'
+            'search:递归搜索目录下包含指定关键词的文件或目录'
             'translate:终端翻译工具'
             'unzip:解压 ZIP 压缩包'
             'upgrade:自动更新 xx 命令行工具至最新版本'
             'zip:自动过滤并打包为 ZIP'
           )
           _describe -t sub_cmds 'xx commands' sub_cmds
+          ;;
+        install)
+          _arguments \\
+            '*:Target Path:_files'
           ;;
         list)
           _arguments \\
@@ -115,6 +102,11 @@ _xx() {
         remove)
           _arguments \\
             '*:Target Path:_files'
+          ;;
+        search)
+          _arguments \\
+            '1:Keyword:' \\
+            '2:Directory:_files -/'
           ;;
         translate)
           _arguments \\
@@ -145,27 +137,14 @@ _xx_completion() {
     COMPREPLY=()
     cur="\${COMP_WORDS[COMP_CWORD]}"
     prev="\${COMP_WORDS[COMP_CWORD-1]}"
-    opts="application completion copy create format help ip list move open park remove translate unzip upgrade zip"
+    opts="completion copy create format help install ip list move open park remove search translate unzip upgrade zip"
 
-    # 1. 第一级命令补全
     if [[ \${COMP_CWORD} -eq 1 ]] ; then
         COMPREPLY=( \$(compgen -W "\${opts}" -- \${cur}) )
         return 0
     fi
 
-    # 2. 精准匹配二级及后续命令的参数补全
     case "\${COMP_WORDS[1]}" in
-        application)
-            if [[ \${COMP_CWORD} -eq 2 ]] ; then
-                local sub_opts="shortcut install remove"
-                COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
-                return 0
-            elif [[ \${COMP_CWORD} -ge 3 ]] ; then
-                # 👈 显式生成：解决 Fedora/RHEL 对空返回 Fallback 进行全局拦截的问题
-                COMPREPLY=( \$(compgen -f -- "\${cur}") )
-                return 0
-            fi
-            ;;
         park)
             local sub_opts="-d -o -g"
             COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
@@ -182,14 +161,12 @@ _xx_completion() {
             return 0
             ;;
         help)
-            local sub_opts="application completion copy create format ip list move open park remove translate unzip upgrade zip"
+            local sub_opts="completion copy create format ip list move open park remove search translate unzip upgrade zip"
             COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
             return 0
             ;;
     esac
 
-    # 3. 终极兜底：对于未单独走 case 逻辑的命令 (如 copy, create, list, format, remove 等需要本地文件/目录参与的命令)
-    # 直接在脚本中由代码显式调用并生成补全结果，杜绝任何系统级拦截
     COMPREPLY=( \$(compgen -f -- "\${cur}") )
 }
 complete -o filenames -o default -o bashdefault -F _xx_completion xx
@@ -199,13 +176,12 @@ complete -o filenames -o default -o bashdefault -F _xx_completion xx
 const POWERSHELL_SCRIPT = `
 \$xx_completer = {
     param(\$wordToComplete, \$commandAst, \$cursorPosition)
-    \$commands = @("application", "completion", "copy", "create", "format", "help", "ip", "list", "move", "open", "park", "remove", "translate", "unzip", "upgrade", "zip")
+    \$commands = @("completion", "copy", "create", "format", "help", "install", "ip", "list", "move", "open", "park", "remove", "search", "translate", "unzip", "upgrade", "zip")
     \$sub_opts = @{
-        "application" = @("shortcut", "install", "remove")
         "park" = @("-d", "-o", "-g")
         "unzip" = @("-d")
         "translate" = @("-t")
-        "help" = @("application", "completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "remove", "translate", "unzip", "upgrade", "zip")
+        "help" = @("completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "remove", "search", "translate", "unzip", "upgrade", "zip")
     }
     \$tokens = \$commandAst.Elements | ForEach-Object { \$_.Value } | Where-Object { \$_ -ne \$null }
     \$tokenCount = \$tokens.Count

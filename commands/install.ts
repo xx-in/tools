@@ -6,7 +6,7 @@ function getHomeDir(): string {
   return Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || Deno.cwd();
 }
 
-// 快捷方式创建逻辑 (供单独调用或 install 命令调用)
+// 核心快捷方式生成函数 (供直接调用或安装后自动调用)
 export async function createShortcut(targetPath: string) {
   const home = getHomeDir();
   const applicationsDir = join(home, ".local/share/applications");
@@ -76,9 +76,33 @@ Categories=Utility;
   }
 }
 
-// 本地 DEB 包安装逻辑
+// AppImage 绿色部署逻辑
+async function installAppImage(absPath: string) {
+  const home = getHomeDir();
+  const greenAppDir = join(home, "GreenApp");
+  const fileName = basename(absPath);
+  const destPath = join(greenAppDir, fileName);
+
+  try {
+    await Deno.mkdir(greenAppDir, { recursive: true });
+    console.log(
+      pc.cyan(`📦 正在将 AppImage 部署至绿色软件目录: ${destPath}...`),
+    );
+    await Deno.copyFile(absPath, destPath);
+    await Deno.chmod(destPath, 0o755); // 赋予执行权限
+    await createShortcut(destPath);
+    console.log(pc.green(`✨ AppImage 部署完成！`));
+  } catch (err) {
+    console.error(
+      pc.red("❌ AppImage 部署失败:"),
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+// DEB 本地包安装
 async function installDeb(absPath: string) {
-  console.log(pc.cyan(`📦 正在安装 DEB 软件包: ${absPath}...`));
+  console.log(pc.cyan(`📦 正在通过 dpkg 本地安装 DEB 软件包: ${absPath}...`));
   const command = new Deno.Command("sudo", {
     args: ["dpkg", "-i", absPath],
     stdout: "inherit",
@@ -86,13 +110,29 @@ async function installDeb(absPath: string) {
   });
   const status = await command.spawn().status;
   if (status.success) {
-    console.log(pc.green("✔ DEB 安装包部署成功！"));
+    console.log(pc.green("✔ DEB 软件包部署成功！"));
   } else {
     console.error(pc.red(`❌ 安装失败，进程退出码: ${status.code}`));
   }
 }
 
-// 绿色软件解压与快捷方式全自动配置逻辑
+// RPM 本地包安装
+async function installRpm(absPath: string) {
+  console.log(pc.cyan(`📦 正在通过 dnf 本地安装 RPM 软件包: ${absPath}...`));
+  const command = new Deno.Command("sudo", {
+    args: ["dnf", "install", "-y", absPath],
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const status = await command.spawn().status;
+  if (status.success) {
+    console.log(pc.green("✔ RPM 软件包部署成功！"));
+  } else {
+    console.error(pc.red(`❌ 安装失败，进程退出码: ${status.code}`));
+  }
+}
+
+// tar.gz 绿色包解压并智能生成图标
 async function installTarGz(absPath: string) {
   const home = getHomeDir();
   if (!home) {
@@ -148,114 +188,63 @@ async function installTarGz(absPath: string) {
     } else {
       console.log(
         pc.yellow(
-          "⚠️ 未能在根目录下定位到明确的可执行文件，请后续手动调用 shortcut 子命令。",
+          "⚠️ 未能在解压目录下定位到明确的可执行二进制文件，请后续手动为其创建快捷方式。",
         ),
       );
     }
   } catch (err) {
     console.error(
-      pc.red("❌ 安装失败:"),
+      pc.red("❌ 绿色软件安装失败:"),
       err instanceof Error ? err.message : err,
     );
   }
 }
 
-// 卸载包逻辑
-async function removeDeb(packageName: string) {
-  console.log(pc.cyan(`📦 正在卸载 DEB 软件包: ${packageName}...`));
-  const command = new Deno.Command("sudo", {
-    args: ["apt-get", "remove", "-y", packageName],
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  const status = await command.spawn().status;
-  if (status.success) {
-    console.log(pc.green(`✔ 软件包 ${packageName} 已成功从系统中移除。`));
-  } else {
-    console.error(pc.red(`❌ 卸载失败，退出码: ${status.code}`));
-  }
-}
-
-export function registerApplicationCommand(program: Command) {
-  // 1. 创建一级命令 "application" [3]
-  const appCmd = program
-    .command("application")
-    .description("Linux 桌面应用辅助管理工具 (快捷方式、本地包安装及卸载)");
-
-  // 2. 在 application 下嵌套二级子命令 [3]
-  appCmd
-    .command("shortcut <path>")
-    .description("为 AppImage、Flatpak ID 或二进制文件创建 Linux 桌面快捷方式")
-    .action(async (path: string) => {
-      await createShortcut(path);
-    });
-
-  appCmd
-    .command("install <path>")
+export function registerInstallCommand(program: Command) {
+  program
+    .command("install [path]") // 👈 统一注册为 xx install [path] 命令
     .description(
-      "安装软件（支持本地 .deb 格式，或 .tar.gz 绿色软件解压安装并创建图标）",
+      "通用应用部署安装（自动分发适配 AppImage、Flatpak ID、tar.gz、deb 及 rpm 格式包）",
     )
-    .action(async (path: string) => {
-      if (!path) {
-        console.error(pc.red("❌ 请提供安装包路径。"));
+    .action(async (target: string | undefined) => {
+      if (!target) {
+        console.error(pc.red("❌ 请提供有效的安装包文件路径或 Flatpak ID。"));
         return;
       }
 
-      const absPath = resolve(Deno.cwd(), path);
+      // 1. 判断是否为 Flatpak ID
+      const isFlatpak =
+        !target.includes("/") &&
+        !target.includes("\\") &&
+        target.split(".").length >= 3;
+      if (isFlatpak) {
+        await createShortcut(target);
+        return;
+      }
+
+      // 2. 本地文件解析逻辑
+      const absPath = resolve(Deno.cwd(), target);
       try {
         await Deno.stat(absPath);
       } catch {
-        console.error(pc.red(`❌ 错误: 找不到文件 '${path}'。`));
+        console.error(pc.red(`❌ 错误: 找不到指定文件或包路径 '${target}'。`));
         return;
       }
 
-      const lowerPath = path.toLowerCase();
-      if (lowerPath.endsWith(".deb")) {
+      const lowerPath = target.toLowerCase();
+      if (lowerPath.endsWith(".appimage")) {
+        await installAppImage(absPath);
+      } else if (lowerPath.endsWith(".deb")) {
         await installDeb(absPath);
+      } else if (lowerPath.endsWith(".rpm")) {
+        await installRpm(absPath);
       } else if (lowerPath.endsWith(".tar.gz") || lowerPath.endsWith(".tgz")) {
         await installTarGz(absPath);
       } else {
-        console.error(
-          pc.red("❌ 暂不支持的安装包格式。仅支持 .deb 与 .tar.gz"),
+        console.log(
+          pc.cyan(`📦 检测到通用本地可执行文件，正在直接为其配置桌面图标...`),
         );
+        await createShortcut(absPath);
       }
-    });
-
-  appCmd
-    .command("remove <package>")
-    .description(
-      "卸载 DEB 软件包（支持直接输入软件包名，或传入本地 .deb 文件路径自动解析）",
-    )
-    .action(async (pkg: string) => {
-      if (!pkg) {
-        console.error(pc.red("❌ 请提供要卸载的软件包名称。"));
-        return;
-      }
-
-      let packageName = pkg;
-
-      if (pkg.toLowerCase().endsWith(".deb")) {
-        const absPath = resolve(Deno.cwd(), pkg);
-        try {
-          const stat = await Deno.stat(absPath);
-          if (stat.isFile) {
-            console.log(
-              pc.cyan(`🔍 检测到输入为本地 DEB 文件，正在读取包名...`),
-            );
-            const dpkgCmd = new Deno.Command("dpkg-deb", {
-              args: ["-f", absPath, "Package"],
-            });
-            const { success, stdout } = await dpkgCmd.output();
-            if (success) {
-              packageName = new TextDecoder().decode(stdout).trim();
-              console.log(pc.green(`✔ 解析成功，包名为: ${packageName}`));
-            }
-          }
-        } catch {
-          // 忽略异常，作为纯包名处理
-        }
-      }
-
-      await removeDeb(packageName);
     });
 }
