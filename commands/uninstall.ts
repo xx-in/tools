@@ -2,11 +2,28 @@ import { Command } from "npm:commander@^11.0.0";
 import pc from "npm:picocolors@^1.0.0";
 import { dirname, resolve, join, basename } from "jsr:@std/path@^1.0.0";
 
+// 可辨识联合类型体
+type UninstallType =
+  | "green"
+  | "flatpak"
+  | "snap"
+  | "deb"
+  | "rpm"
+  | "system"
+  | "unknown";
+
+interface ParsedUninstallTarget {
+  type: UninstallType;
+  raw: string;
+  resolvedPath?: string;
+  extractedPackageName?: string;
+  greenPath?: string;
+}
+
 function getHomeDir(): string {
   return Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || Deno.cwd();
 }
 
-// 检查系统命令是否可用 (例如 which snap)
 async function isCommandAvailable(cmd: string): Promise<boolean> {
   try {
     const command = new Deno.Command("which", { args: [cmd] });
@@ -17,7 +34,6 @@ async function isCommandAvailable(cmd: string): Promise<boolean> {
   }
 }
 
-// 检查应用是否由 Snap 托管安装
 async function isSnapInstalled(packageName: string): Promise<boolean> {
   if (!(await isCommandAvailable("snap"))) return false;
   try {
@@ -29,7 +45,6 @@ async function isSnapInstalled(packageName: string): Promise<boolean> {
   }
 }
 
-// 检查是否为已安装的系统级 DEB/RPM 软件包
 async function isSystemPackageInstalled(packageName: string): Promise<boolean> {
   try {
     const osRelease = await Deno.readTextFile("/etc/os-release");
@@ -43,7 +58,7 @@ async function isSystemPackageInstalled(packageName: string): Promise<boolean> {
       return success;
     } else {
       const cmd = new Deno.Command("dpkg-query", {
-        args: ["-W", "-f=\${Status}", packageName],
+        args: ["-W", "-f=\dots_Status}", packageName],
       });
       const { success, stdout } = await cmd.output();
       if (success) {
@@ -57,12 +72,10 @@ async function isSystemPackageInstalled(packageName: string): Promise<boolean> {
   }
 }
 
-// 智能探测并定位绿色应用路径 (单文件/目录)
 async function findGreenAppPath(appName: string): Promise<string | null> {
   const home = getHomeDir();
   const greenAppDir = join(home, "GreenApp");
 
-  // a. 探测是否为同名目录
   const dirPath = join(greenAppDir, appName);
   try {
     const stat = await Deno.stat(dirPath);
@@ -71,7 +84,6 @@ async function findGreenAppPath(appName: string): Promise<string | null> {
     /* ignore */
   }
 
-  // b. 探测是否为带大小写后缀的 AppImage 单文件
   const appImagePath = join(greenAppDir, `${appName}.AppImage`);
   const appImageLowerPath = join(greenAppDir, `${appName}.appimage`);
   try {
@@ -86,7 +98,6 @@ async function findGreenAppPath(appName: string): Promise<string | null> {
     }
   }
 
-  // c. 兼容用户直接输入带后缀的场景
   if (appName.toLowerCase().endsWith(".appimage")) {
     const directPath = join(greenAppDir, appName);
     try {
@@ -100,7 +111,6 @@ async function findGreenAppPath(appName: string): Promise<string | null> {
   return null;
 }
 
-// 深度读取 DEB 官方包名
 async function extractDebPackageName(
   absPath: string,
 ): Promise<string | undefined> {
@@ -118,7 +128,6 @@ async function extractDebPackageName(
   return undefined;
 }
 
-// 深度读取 RPM 官方包名
 async function extractRpmPackageName(
   absPath: string,
 ): Promise<string | undefined> {
@@ -135,8 +144,6 @@ async function extractRpmPackageName(
   }
   return undefined;
 }
-
-// ---------------- 模糊搜索辅助逻辑 ----------------
 
 async function searchGreenApps(query: string): Promise<string[]> {
   const home = getHomeDir();
@@ -210,11 +217,9 @@ async function searchDebPackages(query: string): Promise<string[]> {
   return pkgs;
 }
 
-// 智能提取干净的 RPM 软件包名，防止展示版本号、构架名等后缀
 async function searchRpmPackages(query: string): Promise<string[]> {
   const pkgs: string[] = [];
   try {
-    // 👈 核心修复：通过指定 --queryformat '%{NAME}\n'，强制 rpm 只输出纯包名（如 google-chrome-stable）
     const command = new Deno.Command("rpm", {
       args: ["-qa", "--queryformat", "%{NAME}\n", `*${query}*`],
     });
@@ -223,7 +228,6 @@ async function searchRpmPackages(query: string): Promise<string[]> {
       const output = new TextDecoder().decode(stdout).trim();
       const lines = output.split("\n");
 
-      // 去重处理，规避因系统中同时存在多个子依赖版本而造成的输出重复
       const uniquePkgs = new Set<string>();
       for (const line of lines) {
         const name = line.trim();
@@ -234,14 +238,11 @@ async function searchRpmPackages(query: string): Promise<string[]> {
       pkgs.push(...uniquePkgs);
     }
   } catch {
-    // ignore
+    /* ignore */
   }
   return pkgs;
 }
 
-// ---------------- 物理执行与分析器 ----------------
-
-// 卸载包命令
 async function removeDeb(packageName: string) {
   console.log(pc.cyan(`📦 正在通过 apt 卸载 DEB 软件包: ${packageName}...`));
   const command = new Deno.Command("sudo", {
@@ -283,7 +284,7 @@ async function removeSnap(packageName: string) {
   if (status.success) {
     console.log(pc.green(`✔ Snap 软件包 ${packageName} 已成功从系统中移除。`));
   } else {
-    console.error(pc.red(`❌ 卸载失败，进程退出码: ${status.code}`));
+    console.error(pc.red(`❌ 卸载失败，退出码: ${status.code}`));
   }
 }
 
@@ -317,12 +318,10 @@ async function uninstallFlatpak(packageName: string) {
   }
 }
 
-// 物理清除绿色应用文件和图标
 async function performRemoveGreenApp(greenPath: string, appName: string) {
   const home = getHomeDir();
   const applicationsDir = join(home, ".local/share/applications");
 
-  // 1. 清理快捷方式
   try {
     for await (const entry of Deno.readDir(applicationsDir)) {
       if (entry.isFile && entry.name.endsWith(".desktop")) {
@@ -338,7 +337,6 @@ async function performRemoveGreenApp(greenPath: string, appName: string) {
     /* ignore */
   }
 
-  // 2. 物理清除主体
   try {
     await Deno.remove(greenPath, { recursive: true });
     console.log(pc.green(`✔ 已成功清除绿色软件主体: ${greenPath}`));
@@ -350,7 +348,6 @@ async function performRemoveGreenApp(greenPath: string, appName: string) {
   }
 }
 
-// 模糊检索与卸载推荐系统
 async function performFuzzySearchAndRecommendation(query: string) {
   const hasSnap = await isCommandAvailable("snap");
 
@@ -412,7 +409,9 @@ async function performFuzzySearchAndRecommendation(query: string) {
     if (greenCands.length > 0) {
       console.log(pc.bold(pc.green("📁 [绿色应用] 候选：")));
       for (const cand of greenCands) {
-        console.log(`  - ${cand}  ${pc.dim(`(卸载命令: xx delete ${cand})`)}`);
+        console.log(
+          `  - ${cand}  ${pc.dim(`(卸载命令: xx uninstall ${cand})`)}`,
+        );
       }
     }
 
@@ -420,22 +419,26 @@ async function performFuzzySearchAndRecommendation(query: string) {
       console.log(pc.bold(pc.magenta("\n📦 [Flatpak] 候选：")));
       for (const cand of flatpakCands) {
         console.log(
-          `  - ${cand.id} [${cand.name}]  ${pc.dim(`(卸载命令: xx delete ${cand.id})`)}`,
+          `  - ${cand.id} [${cand.name}]  ${pc.dim(`(卸载命令: xx uninstall ${cand.id})`)}`,
         );
       }
     }
 
     if (snapCands.length > 0) {
-      console.log(pc.bold(pc.yellow("\n📦 [Snap] 候选：")));
+      console.log(pc.bold(pc.yellow("\n⚡ [Snap] 候选：")));
       for (const cand of snapCands) {
-        console.log(`  - ${cand}  ${pc.dim(`(卸载命令: xx delete ${cand})`)}`);
+        console.log(
+          `  - ${cand}  ${pc.dim(`(卸载命令: xx uninstall ${cand})`)}`,
+        );
       }
     }
 
     if (systemCands.length > 0) {
-      console.log(pc.bold(pc.blue("\n📦 [系统源级] 候选：")));
+      console.log(pc.bold(pc.blue("\n⚙ [系统源级] 候选：")));
       for (const cand of systemCands) {
-        console.log(`  - ${cand}  ${pc.dim(`(卸载命令: xx delete ${cand})`)}`);
+        console.log(
+          `  - ${cand}  ${pc.dim(`(卸载命令: xx uninstall ${cand})`)}`,
+        );
       }
     }
 
@@ -443,7 +446,7 @@ async function performFuzzySearchAndRecommendation(query: string) {
   }
 }
 
-async function parseDeleteTarget(
+async function parseUninstallTarget(
   target: string,
 ): Promise<
   | { type: "green"; raw: string; greenPath: string }
@@ -466,13 +469,11 @@ async function parseDeleteTarget(
 > {
   const lower = target.toLowerCase();
 
-  // A. 绿色应用检测
   const greenPath = await findGreenAppPath(target);
   if (greenPath) {
     return { type: "green", raw: target, greenPath };
   }
 
-  // B. Flatpak 联合类型收窄
   const isFlatpak =
     !target.includes("/") &&
     !target.includes("\\") &&
@@ -481,7 +482,6 @@ async function parseDeleteTarget(
     return { type: "flatpak", raw: target };
   }
 
-  // C. 本地文件形式包体
   if (lower.endsWith(".deb")) {
     const absPath = resolve(Deno.cwd(), target);
     try {
@@ -518,23 +518,20 @@ async function parseDeleteTarget(
     }
   }
 
-  // D. 托管 Snap 检测
   if (await isSnapInstalled(target)) {
     return { type: "snap", raw: target };
   }
 
-  // E. 托管系统内置包检测
   if (await isSystemPackageInstalled(target)) {
     return { type: "system", raw: target };
   }
 
-  // F. 均不适配，标记为未知
   return { type: "unknown", raw: target };
 }
 
-export function registerDeleteCommand(program: Command) {
+export function registerUninstallCommand(program: Command) {
   program
-    .command("delete <package>")
+    .command("uninstall <package>")
     .description("通用应用卸载器（支持包名、Flatpak、Snap、本地包或绿色软件）")
     .action(async (pkg: string) => {
       if (!pkg) {
@@ -545,7 +542,7 @@ export function registerDeleteCommand(program: Command) {
       }
 
       try {
-        const parsed = await parseDeleteTarget(pkg);
+        const parsed = await parseUninstallTarget(pkg);
 
         switch (parsed.type) {
           case "green":

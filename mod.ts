@@ -10,7 +10,6 @@ import denoConfig from "./deno.json" with { type: "json" };
 import { registerCompletionCommand } from "./commands/completion.ts";
 import { registerCopyCommand } from "./commands/copy.ts";
 import { registerCreateCommand } from "./commands/create.ts";
-import { registerDeleteCommand } from "./commands/delete.ts"; // 👈 新增导入
 import { registerFormatCommand } from "./commands/format.ts";
 import { registerInstallCommand } from "./commands/install.ts";
 import { registerIpCommand } from "./commands/ip.ts";
@@ -18,9 +17,10 @@ import { registerLsCommand } from "./commands/list.ts";
 import { registerMoveCommand } from "./commands/move.ts";
 import { registerOpenCommand } from "./commands/open.ts";
 import { registerParkCommand } from "./commands/park.ts";
-import { registerRemoveCommand } from "./commands/remove.ts";
+import { registerRemoveCommand } from "./commands/remove.ts"; // 👈 已变更为注册 remove 模块
 import { registerSearchCommand } from "./commands/search.ts";
 import { registerTanslateCommand } from "./commands/translate.ts";
+import { registerUninstallCommand } from "./commands/uninstall.ts"; // 👈 已变更为注册 uninstall 模块
 import { registerUnzipCommand } from "./commands/unzip.ts";
 import { registerUpgradeCommand } from "./commands/upgrade.ts";
 import { registerZipCommand } from "./commands/zip.ts";
@@ -38,7 +38,6 @@ program
 registerCompletionCommand(program);
 registerCopyCommand(program);
 registerCreateCommand(program);
-registerDeleteCommand(program); // 👈 新增注册
 registerFormatCommand(program);
 registerInstallCommand(program);
 registerIpCommand(program);
@@ -46,9 +45,10 @@ registerLsCommand(program);
 registerMoveCommand(program);
 registerOpenCommand(program);
 registerParkCommand(program);
-registerRemoveCommand(program);
+registerRemoveCommand(program); // 👈 恢复 remove 注册
 registerSearchCommand(program);
 registerTanslateCommand(program);
+registerUninstallCommand(program); // 👈 保持 uninstall 注册
 registerUnzipCommand(program);
 registerUpgradeCommand(program);
 registerZipCommand(program);
