@@ -17,10 +17,11 @@ import { registerLsCommand } from "./commands/list.ts";
 import { registerMoveCommand } from "./commands/move.ts";
 import { registerOpenCommand } from "./commands/open.ts";
 import { registerParkCommand } from "./commands/park.ts";
-import { registerRemoveCommand } from "./commands/remove.ts"; // 👈 已变更为注册 remove 模块
+import { registerProxyCommand } from "./commands/proxy.ts"; // 👈 新增引入
+import { registerRemoveCommand } from "./commands/remove.ts";
 import { registerSearchCommand } from "./commands/search.ts";
 import { registerTanslateCommand } from "./commands/translate.ts";
-import { registerUninstallCommand } from "./commands/uninstall.ts"; // 👈 已变更为注册 uninstall 模块
+import { registerUninstallCommand } from "./commands/uninstall.ts";
 import { registerUnzipCommand } from "./commands/unzip.ts";
 import { registerUpgradeCommand } from "./commands/upgrade.ts";
 import { registerZipCommand } from "./commands/zip.ts";
@@ -45,10 +46,11 @@ registerLsCommand(program);
 registerMoveCommand(program);
 registerOpenCommand(program);
 registerParkCommand(program);
-registerRemoveCommand(program); // 👈 恢复 remove 注册
+registerProxyCommand(program); // 👈 新增注册
+registerRemoveCommand(program);
 registerSearchCommand(program);
 registerTanslateCommand(program);
-registerUninstallCommand(program); // 👈 保持 uninstall 注册
+registerUninstallCommand(program);
 registerUnzipCommand(program);
 registerUpgradeCommand(program);
 registerZipCommand(program);

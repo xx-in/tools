@@ -2,7 +2,7 @@ import { Command } from "npm:commander@^11.0.0";
 import pc from "npm:picocolors@^1.0.0";
 import { join } from "jsr:@std/path@^1.0.0";
 
-// --- Zsh 补全脚本模板 ---
+// --- Zsh 补全及拦截脚本模板 (末尾追加了拦截函数 xx) ---
 const ZSH_SCRIPT = `
 #compdef xx
 
@@ -25,12 +25,12 @@ _xx() {
         'help:显示指定命令的帮助信息'
         'install:自动分发部署安装包 (支持 AppImage、Flatpak ID、tar.gz、deb、rpm)'
         'ip:本地活跃网卡及网关侦测'
-        'list:列出目录中的所有文件和目录（含隐藏项）'
+        'list:列出目录中的所有文件 and 目录（含隐藏项）'
         'move:移动或重命名文件及目录'
         'open:在系统文件管理器中打开指定目录'
         'park:City189 Harbor 离线打包镜像下载工具'
+        'proxy:管理终端临时代理 (proxy on [port] 或 proxy off)'
         'remove:安全地将指定的文件或目录移至系统回收站（支持通配符及多选）'
-        'search:递归搜索目录下包含指定关键词的文件或目录'
         'translate:终端翻译工具'
         'uninstall:通用应用卸载器（支持包名、Flatpak、Snap、本地包或绿色软件）'
         'unzip:解压 ZIP 压缩包'
@@ -67,8 +67,8 @@ _xx() {
             'move:移动或重命名文件及目录'
             'open:在系统文件管理器中打开指定目录'
             'park:City189 Harbor 离线打包镜像下载工具'
+            'proxy:管理终端临时代理 (proxy on [port] 或 proxy off)'
             'remove:安全地将指定的文件或目录移至系统回收站（支持通配符及多选）'
-            'search:递归搜索目录下包含指定关键词的文件或目录'
             'translate:终端翻译工具'
             'uninstall:通用应用卸载器（支持包名、Flatpak、Snap、本地包或绿色软件）'
             'unzip:解压 ZIP 压缩包'
@@ -77,11 +77,7 @@ _xx() {
           )
           _describe -t sub_cmds 'xx commands' sub_cmds
           ;;
-        install)
-          _arguments \\
-            '*:Target Path:_files'
-          ;;
-        list)
+        list|open)
           _arguments \\
             '*:Target Path:_files -/'
           ;;
@@ -90,10 +86,6 @@ _xx() {
             '1:Source:_files' \\
             '2:Target:_files'
           ;;
-        open)
-          _arguments \\
-            '*:Target Path:_files -/'
-          ;;
         park)
           _arguments \\
             '-d[指定本次下载保存的目录路径]:directory:_files -/' \\
@@ -101,14 +93,14 @@ _xx() {
             '-g[配置全局默认下载目录]:directory:_files -/' \\
             '*:Image Name:'
           ;;
+        proxy)
+          _arguments \\
+            '1:Action:(on off)' \\
+            '2:Port:'
+          ;;
         remove)
           _arguments \\
             '*:Target Path:_files'
-          ;;
-        search)
-          _arguments \\
-            '1:Keyword:' \\
-            '2:Directory:_files -/'
           ;;
         translate)
           _arguments \\
@@ -134,16 +126,39 @@ _xx() {
 }
 
 compdef _xx xx
+
+# --- xx 终端代理 Zsh 拦截包装函数 ---
+xx() {
+  if [[ "\$1" == "proxy" ]]; then
+    if [[ "\$2" == "on" ]]; then
+      local port="\${3:-7890}"
+      export http_proxy="http://127.0.0.1:\$port"
+      export https_proxy="http://127.0.0.1:\$port"
+      export all_proxy="socks5://127.0.0.1:\$port"
+      export HTTP_PROXY="http://127.0.0.1:\$port"
+      export HTTPS_PROXY="http://127.0.0.1:\$port"
+      export ALL_PROXY="socks5://127.0.0.1:\$port"
+      echo "✔ [xx] 已开启终端临时代理: 127.0.0.1:\$port"
+    elif [[ "\$2" == "off" ]]; then
+      unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
+      echo "✔ [xx] 已关闭终端临时代理"
+    else
+      command xx "\$@"
+    fi
+  else
+    command xx "\$@"
+  fi
+}
 `;
 
-// --- Bash 补全脚本模板 (按 A-Z 重新排序，恢复 remove) ---
+// --- Bash 补全及拦截脚本模板 ---
 const BASH_SCRIPT = `
 _xx_completion() {
     local cur prev opts
     COMPREPLY=()
     cur="\${COMP_WORDS[COMP_CWORD]}"
     prev="\${COMP_WORDS[COMP_CWORD-1]}"
-    opts="completion copy create format help install ip list move open park remove search translate uninstall unzip upgrade zip"
+    opts="completion copy create format help install ip list move open park proxy remove search translate uninstall unzip upgrade zip"
 
     if [[ \${COMP_CWORD} -eq 1 ]] ; then
         COMPREPLY=( \$(compgen -W "\${opts}" -- \${cur}) )
@@ -156,6 +171,13 @@ _xx_completion() {
             COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
             return 0
             ;;
+        proxy)
+            if [[ \${COMP_CWORD} -eq 2 ]] ; then
+                local sub_opts="on off"
+                COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
+                return 0
+            fi
+            ;;
         unzip)
             local sub_opts="-d"
             COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
@@ -167,7 +189,7 @@ _xx_completion() {
             return 0
             ;;
         help)
-            local sub_opts="completion copy create format ip list move open park remove search translate uninstall unzip upgrade zip"
+            local sub_opts="completion copy create format ip list move open park proxy remove search translate uninstall unzip upgrade zip"
             COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
             return 0
             ;;
@@ -176,18 +198,42 @@ _xx_completion() {
     COMPREPLY=( \$(compgen -f -- "\${cur}") )
 }
 complete -o filenames -o default -o bashdefault -F _xx_completion xx
+
+# --- xx 终端代理 Bash 拦截包装函数 ---
+xx() {
+  if [[ "\$1" == "proxy" ]]; then
+    if [[ "\$2" == "on" ]]; then
+      local port="\${3:-7890}"
+      export http_proxy="http://127.0.0.1:\$port"
+      export https_proxy="http://127.0.0.1:\$port"
+      export all_proxy="socks5://127.0.0.1:\$port"
+      export HTTP_PROXY="http://127.0.0.1:\$port"
+      export HTTPS_PROXY="http://127.0.0.1:\$port"
+      export ALL_PROXY="socks5://127.0.0.1:\$port"
+      echo "✔ [xx] 已开启终端临时代理: 127.0.0.1:\$port"
+    elif [[ "\$2" == "off" ]]; then
+      unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
+      echo "✔ [xx] 已关闭终端临时代理"
+    else
+      command xx "\$@"
+    fi
+  else
+    command xx "\$@"
+  fi
+}
 `;
 
-// --- PowerShell 补全脚本模板 ---
+// --- PowerShell 补全及拦截脚本模板 ---
 const POWERSHELL_SCRIPT = `
 \$xx_completer = {
     param(\$wordToComplete, \$commandAst, \$cursorPosition)
-    \$commands = @("completion", "copy", "create", "format", "help", "install", "ip", "list", "move", "open", "park", "remove", "search", "translate", "uninstall", "unzip", "upgrade", "zip")
+    \$commands = @("completion", "copy", "create", "format", "help", "install", "ip", "list", "move", "open", "park", "proxy", "remove", "search", "translate", "uninstall", "unzip", "upgrade", "zip")
     \$sub_opts = @{
         "park" = @("-d", "-o", "-g")
+        "proxy" = @("on", "off")
         "unzip" = @("-d")
         "translate" = @("-t")
-        "help" = @("completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "remove", "search", "translate", "uninstall", "unzip", "upgrade", "zip")
+        "help" = @("completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "proxy", "remove", "search", "translate", "uninstall", "unzip", "upgrade", "zip")
     }
     \$tokens = \$commandAst.Elements | ForEach-Object { \$_.Value } | Where-Object { \$_ -ne \$null }
     \$tokenCount = \$tokens.Count
@@ -207,6 +253,34 @@ const POWERSHELL_SCRIPT = `
     }
 }
 Register-ArgumentCompleter -CommandName 'xx' -ScriptBlock \$xx_completer
+
+# --- xx 终端代理 PowerShell 拦截包装函数 ---
+function xx {
+    if (\$args[0] -eq "proxy") {
+        if (\$args[1] -eq "on") {
+            \$port = if (\$args[2]) { \$args[2] } else { "7890" }
+            \$env:http_proxy = "http://127.0.0.1:\$port"
+            \$env:https_proxy = "http://127.0.0.1:\$port"
+            \$env:all_proxy = "socks5://127.0.0.1:\$port"
+            \$env:HTTP_PROXY = "http://127.0.0.1:\$port"
+            \$env:HTTPS_PROXY = "http://127.0.0.1:\$port"
+            \$env:ALL_PROXY = "socks5://127.0.0.1:\$port"
+            Write-Host "✔ [xx] 已开启终端临时代理: 127.0.0.1:\$port" -ForegroundColor Green
+        } elseif (\$args[1] -eq "off") {
+            Remove-Item env:http_proxy -ErrorAction SilentlyContinue
+            Remove-Item env:https_proxy -ErrorAction SilentlyContinue
+            Remove-Item env:all_proxy -ErrorAction SilentlyContinue
+            Remove-Item env:HTTP_PROXY -ErrorAction SilentlyContinue
+            Remove-Item env:HTTPS_PROXY -ErrorAction SilentlyContinue
+            Remove-Item env:ALL_PROXY -ErrorAction SilentlyContinue
+            Write-Host "✔ [xx] 已关闭终端临时代理" -ForegroundColor Green
+        } else {
+            & (Get-Command xx -CommandType Application) @args
+        }
+    } else {
+        & (Get-Command xx -CommandType Application) @args
+    }
+}
 `;
 
 // 自动化安装实现

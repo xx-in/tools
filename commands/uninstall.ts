@@ -446,9 +446,7 @@ async function performFuzzySearchAndRecommendation(query: string) {
   }
 }
 
-async function parseUninstallTarget(
-  target: string,
-): Promise<
+async function parseUninstallTarget(target: string): Promise<
   | { type: "green"; raw: string; greenPath: string }
   | { type: "flatpak"; raw: string }
   | { type: "snap"; raw: string }
