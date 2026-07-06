@@ -5,7 +5,7 @@ export function registerProxyCommand(program: Command) {
   program
     .command("proxy [action] [port]")
     .description(
-      "管理终端临时代理 (支持 proxy on [port] 或 proxy off，默认端口 7890)",
+      "管理终端临时代理 (支持 proxy on [port] 或 proxy off，无参数时查看当前状态)",
     )
     .action((action: string | undefined, port: string | undefined) => {
       if (action === "on") {
@@ -37,9 +37,26 @@ export function registerProxyCommand(program: Command) {
           ),
         );
       } else {
-        console.log(pc.cyan("💡 终端临时代理工具。用法："));
-        console.log("  xx proxy on [port]  - 开启代理 (默认端口 7890)");
-        console.log("  xx proxy off        - 关闭代理");
+        // 👈 无参数时的检测逻辑
+        const httpProxy =
+          Deno.env.get("http_proxy") || Deno.env.get("HTTP_PROXY");
+        const httpsProxy =
+          Deno.env.get("https_proxy") || Deno.env.get("HTTPS_PROXY");
+        const allProxy = Deno.env.get("all_proxy") || Deno.env.get("ALL_PROXY");
+
+        if (httpProxy || httpsProxy || allProxy) {
+          console.log(pc.yellow("🔍 [xx] 检测到当前终端已配置临时代理："));
+          if (httpProxy) console.log(`  http_proxy  = ${pc.bold(httpProxy)}`);
+          if (httpsProxy) console.log(`  https_proxy = ${pc.bold(httpsProxy)}`);
+          if (allProxy) console.log(`  all_proxy   = ${pc.bold(allProxy)}`);
+        } else {
+          console.log(pc.green("🔍 [xx] 当前终端未配置任何代理 (直连模式)"));
+        }
+        console.log(
+          pc.dim(
+            "\n💡 提示：您可以使用 'xx proxy on [port]' 开启或 'xx proxy off' 关闭临时代理。",
+          ),
+        );
       }
     });
 }

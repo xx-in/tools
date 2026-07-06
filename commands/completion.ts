@@ -2,7 +2,7 @@ import { Command } from "npm:commander@^11.0.0";
 import pc from "npm:picocolors@^1.0.0";
 import { join } from "jsr:@std/path@^1.0.0";
 
-// --- Zsh 补全及拦截脚本模板 (末尾追加了拦截函数 xx) ---
+// --- Zsh 补全脚本模板 ---
 const ZSH_SCRIPT = `
 #compdef xx
 
@@ -25,12 +25,13 @@ _xx() {
         'help:显示指定命令的帮助信息'
         'install:自动分发部署安装包 (支持 AppImage、Flatpak ID、tar.gz、deb、rpm)'
         'ip:本地活跃网卡及网关侦测'
-        'list:列出目录中的所有文件 and 目录（含隐藏项）'
+        'list:列出目录中的所有文件和目录（含隐藏项）'
         'move:移动或重命名文件及目录'
         'open:在系统文件管理器中打开指定目录'
         'park:City189 Harbor 离线打包镜像下载工具'
         'proxy:管理终端临时代理 (proxy on [port] 或 proxy off)'
         'remove:安全地将指定的文件或目录移至系统回收站（支持通配符及多选）'
+        'search:递归搜索目录下包含指定关键词的文件或目录'
         'translate:终端翻译工具'
         'uninstall:通用应用卸载器（支持包名、Flatpak、Snap、本地包或绿色软件）'
         'unzip:解压 ZIP 压缩包'
@@ -102,6 +103,11 @@ _xx() {
           _arguments \\
             '*:Target Path:_files'
           ;;
+        search)
+          _arguments \\
+            '1:Keyword:' \\
+            '2:Directory:_files -/'
+          ;;
         translate)
           _arguments \\
             '-t[指定目标语言 (默认 auto)]' \\
@@ -130,7 +136,19 @@ compdef _xx xx
 # --- xx 终端代理 Zsh 拦截包装函数 ---
 xx() {
   if [[ "\$1" == "proxy" ]]; then
-    if [[ "\$2" == "on" ]]; then
+    if [[ -z "\$2" ]]; then
+      if [[ -n "\$http_proxy" || -n "\$https_proxy" || -n "\$all_proxy" || -n "\$HTTP_PROXY" || -n "\$HTTPS_PROXY" || -n "\$ALL_PROXY" ]]; then
+        echo "🔍 [xx] 终端当前已配置代理："
+        [[ -n "\$http_proxy" ]] && echo "  http_proxy  = \$http_proxy"
+        [[ -n "\$https_proxy" ]] && echo "  https_proxy = \$https_proxy"
+        [[ -n "\$all_proxy" ]] && echo "  all_proxy   = \$all_proxy"
+        [[ -n "\$HTTP_PROXY" ]] && echo "  HTTP_PROXY  = \$HTTP_PROXY"
+        [[ -n "\$HTTPS_PROXY" ]] && echo "  HTTPS_PROXY = \$HTTPS_PROXY"
+        [[ -n "\$ALL_PROXY" ]] && echo "  ALL_PROXY   = \$ALL_PROXY"
+      else
+        echo "🔍 [xx] 终端当前未配置任何代理 (直连模式)"
+      fi
+    elif [[ "\$2" == "on" ]]; then
       local port="\${3:-7890}"
       export http_proxy="http://127.0.0.1:\$port"
       export https_proxy="http://127.0.0.1:\$port"
@@ -151,7 +169,7 @@ xx() {
 }
 `;
 
-// --- Bash 补全及拦截脚本模板 ---
+// --- Bash 补全脚本模板 ---
 const BASH_SCRIPT = `
 _xx_completion() {
     local cur prev opts
@@ -202,7 +220,19 @@ complete -o filenames -o default -o bashdefault -F _xx_completion xx
 # --- xx 终端代理 Bash 拦截包装函数 ---
 xx() {
   if [[ "\$1" == "proxy" ]]; then
-    if [[ "\$2" == "on" ]]; then
+    if [[ -z "\$2" ]]; then
+      if [[ -n "\$http_proxy" || -n "\$https_proxy" || -n "\$all_proxy" || -n "\$HTTP_PROXY" || -n "\$HTTPS_PROXY" || -n "\$ALL_PROXY" ]]; then
+        echo "🔍 [xx] 终端当前已配置代理："
+        [[ -n "\$http_proxy" ]] && echo "  http_proxy  = \$http_proxy"
+        [[ -n "\$https_proxy" ]] && echo "  https_proxy = \$https_proxy"
+        [[ -n "\$all_proxy" ]] && echo "  all_proxy   = \$all_proxy"
+        [[ -n "\$HTTP_PROXY" ]] && echo "  HTTP_PROXY  = \$HTTP_PROXY"
+        [[ -n "\$HTTPS_PROXY" ]] && echo "  HTTPS_PROXY = \$HTTPS_PROXY"
+        [[ -n "\$ALL_PROXY" ]] && echo "  ALL_PROXY   = \$ALL_PROXY"
+      else
+        echo "🔍 [xx] 终端当前未配置任何代理 (直连模式)"
+      fi
+    elif [[ "\$2" == "on" ]]; then
       local port="\${3:-7890}"
       export http_proxy="http://127.0.0.1:\$port"
       export https_proxy="http://127.0.0.1:\$port"
@@ -233,14 +263,14 @@ const POWERSHELL_SCRIPT = `
         "proxy" = @("on", "off")
         "unzip" = @("-d")
         "translate" = @("-t")
-        "help" = @("completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "proxy", "remove", "search", "translate", "uninstall", "unzip", "upgrade", "zip")
+        "help" = @("completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "proxy", "remove", "search", "translate", "unzip", "upgrade", "zip")
     }
     \$tokens = \$commandAst.Elements | ForEach-Object { \$_.Value } | Where-Object { \$_ -ne \$null }
     \$tokenCount = \$tokens.Count
 
     if (\$tokenCount -le 2) {
         \$commands | Where-Object { \$_ -like "\$wordToComplete*" } | ForEach-Object {
-            [System.Management.Automation.CompletionResult]::new(\$_, \$_, 'Command', \$_)
+            [System.Management.Automation.CompletionResult]::new(\$_, \$_, 'Command', \$_) # 👈 已修复此处 typo: \\$, -> \\$_
         }
     } else {
         \$subCmd = \$tokens[1]
@@ -257,7 +287,19 @@ Register-ArgumentCompleter -CommandName 'xx' -ScriptBlock \$xx_completer
 # --- xx 终端代理 PowerShell 拦截包装函数 ---
 function xx {
     if (\$args[0] -eq "proxy") {
-        if (\$args[1] -eq "on") {
+        if (-not \$args[1]) {
+            if (\$env:http_proxy -or \$env:https_proxy -or \$env:all_proxy -or \$env:HTTP_PROXY -or \$env:HTTPS_PROXY -or \$env:ALL_PROXY) {
+                Write-Host "🔍 [xx] 终端当前已配置代理：" -ForegroundColor Yellow
+                if (\$env:http_proxy)  { Write-Host "  http_proxy  = \$env:http_proxy" }
+                if (\$env:https_proxy) { Write-Host "  https_proxy = \$env:https_proxy" }
+                if (\$env:all_proxy)   { Write-Host "  all_proxy   = \$env:all_proxy" }
+                if (\$env:HTTP_PROXY)  { Write-Host "  HTTP_PROXY  = \$env:HTTP_PROXY" }
+                if (\$env:HTTPS_PROXY) { Write-Host "  HTTPS_PROXY = \$env:HTTPS_PROXY" }
+                if (\$env:ALL_PROXY)   { Write-Host "  ALL_PROXY   = \$env:ALL_PROXY" }
+            } else {
+                Write-Host "🔍 [xx] 终端当前未配置任何代理 (直连模式)" -ForegroundColor Green
+            }
+        } elseif (\$args[1] -eq "on") {
             \$port = if (\$args[2]) { \$args[2] } else { "7890" }
             \$env:http_proxy = "http://127.0.0.1:\$port"
             \$env:https_proxy = "http://127.0.0.1:\$port"

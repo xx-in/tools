@@ -1,6 +1,6 @@
 {
   "name": "@xxin/tools",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "license": "MIT",
   "description": "A command-line tool to run in any system",
   "exports": {
