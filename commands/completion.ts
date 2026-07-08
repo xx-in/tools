@@ -70,6 +70,7 @@ _xx() {
             'park:City189 Harbor 离线打包镜像下载工具'
             'proxy:管理终端临时代理 (proxy on [port] 或 proxy off)'
             'remove:安全地将指定的文件或目录移至系统回收站（支持通配符及多选）'
+            'search:递归搜索目录下包含指定关键词的文件或目录'
             'translate:终端翻译工具'
             'uninstall:通用应用卸载器（支持包名、Flatpak、Snap、本地包或绿色软件）'
             'unzip:解压 ZIP 压缩包'
@@ -102,11 +103,6 @@ _xx() {
         remove)
           _arguments \\
             '*:Target Path:_files'
-          ;;
-        search)
-          _arguments \\
-            '1:Keyword:' \\
-            '2:Directory:_files -/'
           ;;
         translate)
           _arguments \\
@@ -263,14 +259,14 @@ const POWERSHELL_SCRIPT = `
         "proxy" = @("on", "off")
         "unzip" = @("-d")
         "translate" = @("-t")
-        "help" = @("completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "proxy", "remove", "search", "translate", "unzip", "upgrade", "zip")
+        "help" = @("completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "proxy", "remove", "search", "translate", "uninstall", "unzip", "upgrade", "zip")
     }
     \$tokens = \$commandAst.Elements | ForEach-Object { \$_.Value } | Where-Object { \$_ -ne \$null }
     \$tokenCount = \$tokens.Count
 
     if (\$tokenCount -le 2) {
         \$commands | Where-Object { \$_ -like "\$wordToComplete*" } | ForEach-Object {
-            [System.Management.Automation.CompletionResult]::new(\$_, \$_, 'Command', \$_) # 👈 已修复此处 typo: \\$, -> \\$_
+            [System.Management.Automation.CompletionResult]::new(\$_, \$_, 'Command', \$_)
         }
     } else {
         \$subCmd = \$tokens[1]
@@ -325,7 +321,7 @@ function xx {
 }
 `;
 
-// 自动化安装实现
+// 自动化安装实现 (增加了在 Windows 下强制写入 UTF-8 BOM 编码的机制)
 export async function autoInstallCompletion() {
   const osType = Deno.build.os;
   const home = Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || "";
@@ -339,10 +335,18 @@ export async function autoInstallCompletion() {
     const completionPath = join(home, ".xx_completion_xx.ps1");
 
     try {
-      await Deno.writeTextFile(completionPath, POWERSHELL_SCRIPT.trim());
+      // 👈 核心修复：在文件头部写入标准 UTF-8 BOM 三字节（0xEF, 0xBB, 0xBF），强制 Windows 加载时作为全局 UTF-8 解析
+      const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+      const contentBytes = new TextEncoder().encode(POWERSHELL_SCRIPT.trim());
+      const mergedBytes = new Uint8Array(bom.length + contentBytes.length);
+      mergedBytes.set(bom);
+      mergedBytes.set(contentBytes, bom.length);
+
+      // 直接写入合并后的带有 BOM 的二进制字节流
+      await Deno.writeFile(completionPath, mergedBytes);
       console.log(
         pc.green(
-          `✔ 已创建并覆盖 PowerShell 补全脚本: ${pc.bold(completionPath)}`,
+          `✔ 已创建并覆盖 PowerShell 补全脚本 (UTF-8 BOM): ${pc.bold(completionPath)}`,
         ),
       );
 

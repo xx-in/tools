@@ -1,54 +1,89 @@
 import { Command } from "npm:commander@^11.0.0";
 import pc from "npm:picocolors@^1.0.0";
 import os from "node:os";
-import dgram from "node:dgram";
 
-// 网卡信息接口
-interface ActiveInterface {
-  interfaceName: string;
-  address: string;
-  netmask: string;
-  family: string;
-  mac: string;
-  internal: boolean;
-  cidr: string | null;
-}
-
-interface NetworkInterfaceItem {
+// 网卡数据结构
+interface NetworkCard {
   name: string;
-  info: os.NetworkInterfaceInfo;
+  mac: string;
+  type: "有线/物理网卡" | "无线网卡" | "VPN/安全隧道" | "其他虚拟/临时设备";
+  addresses: {
+    family: string;
+    address: string;
+    netmask: string;
+  }[];
 }
 
-// 过滤获取所有非回环、非内部的网卡候选列表
-function getNonInternalInterfaces(): NetworkInterfaceItem[] {
-  const interfaces = os.networkInterfaces();
-  const list: NetworkInterfaceItem[] = [];
+interface DefaultRoute {
+  gateway: string;
+  interfaceName: string;
+}
 
-  if (interfaces) {
-    for (const name of Object.keys(interfaces)) {
-      const lowerName = name.toLowerCase();
-      if (
-        lowerName === "lo" ||
-        lowerName.startsWith("lo") ||
-        lowerName.includes("loopback") ||
-        lowerName.includes("回环")
-      ) {
-        continue;
-      }
+// 判定网卡物理类型
+function getInterfaceType(
+  name: string,
+): "有线/物理网卡" | "无线网卡" | "VPN/安全隧道" | "其他虚拟/临时设备" {
+  const lowerName = name.toLowerCase();
 
-      const netList = interfaces[name];
-      if (!netList) continue;
-
-      for (const net of netList) {
-        if (net.internal) continue;
-        if (net.address === "127.0.0.1" || net.address === "::1") continue;
-        if (net.address === "0.0.0.0") continue;
-
-        list.push({ name, info: net });
-      }
-    }
+  // 1. 优先提取高价值的 VPN / 隧道虚拟网卡
+  const vpnKeywords = [
+    /tun/i,
+    /tap/i,
+    /utun/i,
+    /ppp/i,
+    /tailscale/i,
+    /zerotier/i,
+    /wg[0-9]/i,
+    /wireguard/i,
+    /cisco/i,
+    /forticlient/i,
+    /anyconnect/i,
+    /globalprotect/i,
+  ];
+  if (vpnKeywords.some((regex) => regex.test(lowerName))) {
+    return "VPN/安全隧道";
   }
-  return list;
+
+  // 2. 排除已知的各类本地、容器及模拟虚拟网卡
+  const virtualKeywords = [
+    /virtual/i,
+    /vbox/i,
+    /vmnet/i,
+    /docker/i,
+    /veth/i,
+    /bridge/i,
+    /gif/i,
+    /stf/i,
+    /wsl/i,
+  ];
+  if (virtualKeywords.some((regex) => regex.test(lowerName))) {
+    return "其他虚拟/临时设备";
+  }
+
+  // 3. 识别无线网卡标志
+  const wirelessKeywords = [/wlan/i, /wlp/i, /wi-fi/i, /无线/i, /wifi/i];
+  if (wirelessKeywords.some((regex) => regex.test(lowerName))) {
+    return "无线网卡";
+  }
+
+  // 4. 识别有线及标准物理网卡标志
+  const wiredKeywords = [
+    /en[0-9]/i,
+    /eth[0-9]/i,
+    /ethernet/i,
+    /lan/i,
+    /以太网/i,
+  ];
+  if (wiredKeywords.some((regex) => regex.test(lowerName))) {
+    return "有线/物理网卡";
+  }
+
+  // macOS 默认以 en 开头判定为物理物理网卡
+  if (lowerName.startsWith("en") || lowerName.startsWith("eth")) {
+    return "有线/物理网卡";
+  }
+
+  return "其他虚拟/临时设备";
 }
 
 // IPv4 子网匹配计算
@@ -74,174 +109,84 @@ function ipInSubnet(ip: string, target: string, netmask: string): boolean {
   return true;
 }
 
-// 通过 UDP 连接探测本地路由出口 IP
-function getActiveIpViaUdp(
-  dest: string,
-  family: "udp4" | "udp6",
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let socket: dgram.Socket;
-    try {
-      socket = dgram.createSocket(family);
-    } catch (err) {
-      return reject(err);
+// 过滤并合并获取非回环网卡列表 (升级版：智能剥离 macOS 系统服务的占位 utun 网卡)
+function getActiveNetworkCards(): NetworkCard[] {
+  const interfaces = os.networkInterfaces();
+  const cardsMap = new Map<string, NetworkCard>();
+
+  if (!interfaces) return [];
+
+  for (const name of Object.keys(interfaces)) {
+    const lowerName = name.toLowerCase();
+
+    if (
+      lowerName === "lo" ||
+      lowerName.startsWith("lo") ||
+      lowerName.includes("loopback") ||
+      lowerName.includes("回环")
+    ) {
+      continue;
     }
 
-    socket.connect(53, dest, () => {
-      try {
-        const addr = socket.address();
-        socket.close();
-        resolve(addr.address);
-      } catch (err) {
-        socket.close();
-        reject(err);
+    const netList = interfaces[name];
+    if (!netList) continue;
+
+    for (const net of netList) {
+      if (net.internal) continue;
+      if (
+        net.address === "127.0.0.1" ||
+        net.address === "::1" ||
+        net.address === "0.0.0.0"
+      ) {
+        continue;
       }
-    });
 
-    socket.on("error", (err) => {
-      socket.close();
-      reject(err);
-    });
-  });
-}
+      const cardType = getInterfaceType(name);
 
-// 智能选择物理网卡
-function pickBestInterface(
-  interfaces: NetworkInterfaceItem[],
-): NetworkInterfaceItem | null {
-  if (interfaces.length === 0) return null;
-  if (interfaces.length === 1) return interfaces[0];
-
-  const virtualKeywords = [
-    /virtual/i,
-    /vbox/i,
-    /vmnet/i,
-    /docker/i,
-    /veth/i,
-    /bridge/i,
-    /gif/i,
-    /stf/i,
-    /utun/i,
-    /wsl/i,
-  ];
-  const physicalList = interfaces.filter((item) => {
-    return !virtualKeywords.some((regex) => regex.test(item.name));
-  });
-
-  if (physicalList.length > 0) {
-    const priorityKeywords = [
-      /en[0-9]/i,
-      /eth[0-9]/i,
-      /wlan[0-9]/i,
-      /wlp/i,
-      /wi-fi/i,
-      /ethernet/i,
-      /lan/i,
-      /以太网/i,
-      /无线/i,
-    ];
-    physicalList.sort((a, b) => {
-      const aMatch = priorityKeywords.findIndex((regex) => regex.test(a.name));
-      const bMatch = priorityKeywords.findIndex((regex) => regex.test(b.name));
-      if (aMatch !== -1 && bMatch === -1) return -1;
-      if (bMatch !== -1 && aMatch === -1) return 1;
-      if (aMatch !== -1 && bMatch !== -1) return aMatch - bMatch;
-      return 0;
-    });
-    return physicalList[0];
-  }
-
-  return interfaces[0];
-}
-
-// 核心检测入口
-async function getActiveInterface(gateway?: string): Promise<ActiveInterface> {
-  const nonInternal = getNonInternalInterfaces();
-
-  if (nonInternal.length === 0) {
-    throw new Error("未找到任何可用的非本地回环网卡。");
-  }
-
-  if (gateway && gateway.match(/^\d+\.\d+\.\d+\.\d+$/)) {
-    for (const item of nonInternal) {
-      if (item.info.family === "IPv4" || String(item.info.family) === "4") {
-        if (ipInSubnet(item.info.address, gateway, item.info.netmask)) {
-          return {
-            interfaceName: item.name,
-            address: item.info.address,
-            netmask: item.info.netmask,
-            family: String(item.info.family),
-            mac: item.info.mac,
-            internal: item.info.internal,
-            cidr: item.info.cidr ?? null,
-          };
-        }
-      }
-    }
-  }
-
-  let activeIp = "";
-  try {
-    activeIp = await getActiveIpViaUdp("8.8.8.8", "udp4");
-  } catch (_e) {
-    try {
-      activeIp = await getActiveIpViaUdp("2001:4860:4860::8888", "udp6");
-    } catch (_err) {
-      try {
-        const conn = await Deno.connect({
-          hostname: "114.114.114.114",
-          port: 53,
-          transport: "tcp",
+      if (!cardsMap.has(name)) {
+        cardsMap.set(name, {
+          name,
+          mac: net.mac || "未知",
+          type: cardType,
+          addresses: [],
         });
-        if (conn.localAddr && "hostname" in conn.localAddr) {
-          activeIp = conn.localAddr.hostname;
-        }
-        conn.close();
-      } catch (_tcperr) {
-        // 忽略异常，由下方的 pickBestInterface 兜底
       }
+
+      cardsMap.get(name)!.addresses.push({
+        family: String(net.family),
+        address: net.address,
+        netmask: net.netmask || "",
+      });
     }
   }
 
-  if (
-    activeIp &&
-    activeIp !== "127.0.0.1" &&
-    activeIp !== "::1" &&
-    activeIp !== "0.0.0.0"
-  ) {
-    for (const item of nonInternal) {
-      if (item.info.address === activeIp) {
-        return {
-          interfaceName: item.name,
-          address: item.info.address,
-          netmask: item.info.netmask,
-          family: String(item.info.family),
-          mac: item.info.mac,
-          internal: item.info.internal,
-          cidr: item.info.cidr ?? null,
-        };
+  // 👈 核心升级：过滤无实际网络路由意义的“纯本地链路 IPv6”VPN 隧道设备 (如 utun0-5)
+  const filteredCards: NetworkCard[] = [];
+  for (const card of cardsMap.values()) {
+    if (card.type === "VPN/安全隧道") {
+      const hasIPv4 = card.addresses.some(
+        (a) => a.family === "IPv4" || a.family === "4",
+      );
+      // 检查是否存在非本地链路 (即不以 fe80: 开头) 的全局 IPv6 路由地址
+      const hasGlobalIPv6 = card.addresses.some(
+        (a) =>
+          (a.family === "IPv6" || a.family === "6") &&
+          !a.address.toLowerCase().startsWith("fe80:"),
+      );
+
+      // 如果既没有分配 IPv4，也没有分配全局可路由的 IPv6，断定为系统服务占位卡，予以直接剔除
+      if (!hasIPv4 && !hasGlobalIPv6) {
+        continue;
       }
     }
+    filteredCards.push(card);
   }
 
-  const best = pickBestInterface(nonInternal);
-  if (best) {
-    return {
-      interfaceName: best.name,
-      address: best.info.address,
-      netmask: best.info.netmask,
-      family: String(best.info.family),
-      mac: best.info.mac,
-      internal: best.info.internal,
-      cidr: best.info.cidr ?? null,
-    };
-  }
-
-  throw new Error("未能定位到本地活跃网卡。");
+  return filteredCards;
 }
 
 // 获取默认网关
-async function getDefaultGateway(): Promise<string> {
+async function getDefaultRouteInfo(): Promise<DefaultRoute> {
   const platform = Deno.build.os;
   let cmd = "";
   let args: string[] = [];
@@ -251,16 +196,16 @@ async function getDefaultGateway(): Promise<string> {
     args = [
       "-NoProfile",
       "-Command",
-      "Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Select-Object -ExpandProperty NextHop",
+      "Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Select-Object -Property NextHop, InterfaceAlias | ConvertTo-Json -Compress",
     ];
   } else if (platform === "darwin") {
     cmd = "sh";
-    args = ["-c", "route -n get default | grep gateway | awk '{print $2}'"];
+    args = ["-c", "route -n get default"];
   } else if (platform === "linux") {
     cmd = "sh";
-    args = ["-c", "ip route show | grep default | awk '{print $3}'"];
+    args = ["-c", "ip route show"];
   } else {
-    throw new Error("当前系统暂不支持网关检测");
+    throw new Error("当前系统暂不支持网关及默认路由设备检测");
   }
 
   const command = new Deno.Command(cmd, {
@@ -273,19 +218,47 @@ async function getDefaultGateway(): Promise<string> {
 
   if (!success) {
     const errorString = new TextDecoder().decode(stderr);
-    throw new Error(errorString || "执行系统命令失败");
+    throw new Error(errorString || "执行系统路由表查询命令失败");
   }
 
   const output = new TextDecoder().decode(stdout).trim();
   if (!output) {
-    throw new Error("未检测到有效网关");
+    throw new Error("系统路由表中未检索到任何默认路由配置");
   }
 
-  const firstLine = output.split("\n")[0];
-  return firstLine ? firstLine.trim() : "";
+  const routeInfo: DefaultRoute = { gateway: "", interfaceName: "" };
+
+  if (platform === "darwin") {
+    const gatewayMatch = output.match(/gateway:\s*(\S+)/i);
+    const interfaceMatch = output.match(/interface:\s*(\S+)/i);
+    routeInfo.gateway = gatewayMatch ? gatewayMatch[1].trim() : "";
+    routeInfo.interfaceName = interfaceMatch ? interfaceMatch[1].trim() : "";
+  } else if (platform === "linux") {
+    const defaultLine = output
+      .split("\n")
+      .find((line) => line.startsWith("default"));
+    if (defaultLine) {
+      const viaMatch = defaultLine.match(/via\s+(\S+)/);
+      const devMatch = defaultLine.match(/dev\s+(\S+)/);
+      routeInfo.gateway = viaMatch ? viaMatch[1].trim() : "";
+      routeInfo.interfaceName = devMatch ? devMatch[1].trim() : "";
+    }
+  } else if (platform === "windows") {
+    try {
+      const parsed = JSON.parse(output);
+      const activeRoute = Array.isArray(parsed) ? parsed[0] : parsed;
+      routeInfo.gateway = activeRoute.NextHop ? activeRoute.NextHop.trim() : "";
+      routeInfo.interfaceName = activeRoute.InterfaceAlias
+        ? activeRoute.InterfaceAlias.trim()
+        : "";
+    } catch {
+      // ignore
+    }
+  }
+
+  return routeInfo;
 }
 
-// 注册 ip 子命令
 export function registerIpCommand(program: Command) {
   program
     .command("ip")
@@ -293,35 +266,113 @@ export function registerIpCommand(program: Command) {
     .action(async (): Promise<void> => {
       console.log(pc.dim("正在分析网络配置，请稍候...\n"));
       try {
-        let gateway = "";
-        let gatewayError = "";
+        let defaultRoute: DefaultRoute = { gateway: "", interfaceName: "" };
+        let routeError = "";
 
         try {
-          gateway = await getDefaultGateway();
+          defaultRoute = await getDefaultRouteInfo();
         } catch (err) {
-          gatewayError = err instanceof Error ? err.message : String(err);
+          routeError = err instanceof Error ? err.message : String(err);
         }
 
-        const activeNet = await getActiveInterface(gateway);
+        const cards = getActiveNetworkCards();
 
-        console.log(
-          pc.cyan("================ 活跃网卡及网关信息 ================"),
+        if (cards.length === 0) {
+          console.log(pc.red("❌ 未检测到任何活跃的非本地回环网卡。"));
+          return;
+        }
+
+        // 优先级排序：有线 ➡️ 无线 ➡️ VPN隧道 ➡️ 其他虚拟设备
+        cards.sort((a, b) => {
+          const order = {
+            "有线/物理网卡": 1,
+            无线网卡: 2,
+            "VPN/安全隧道": 3,
+            "其他虚拟/临时设备": 4,
+          };
+          return order[a.type] - order[b.type];
+        });
+
+        const hasUsefulCard = cards.some(
+          (c) =>
+            c.type === "有线/物理网卡" ||
+            c.type === "无线网卡" ||
+            c.type === "VPN/安全隧道",
         );
-        console.log(
-          `${pc.green("网卡名称 (Name):")}   ${pc.bold(activeNet.interfaceName)}`,
-        );
-        console.log(
-          `${pc.green("本机 IP 地址 (IP):")}  ${pc.bold(activeNet.address)}`,
-        );
-        console.log(`${pc.green("子网掩码 (Mask):")}   ${activeNet.netmask}`);
-        console.log(
-          `${pc.green("默认网关 (Gateway):")} ${pc.yellow(gateway || `未检测到 (原因: ${gatewayError})`)}`,
-        );
-        console.log(`${pc.green("MAC 地址 (MAC):")}    ${activeNet.mac}`);
-        console.log(`${pc.green("IP 协议版本:")}       ${activeNet.family}`);
-        console.log(
-          pc.cyan("===================================================="),
-        );
+
+        for (const card of cards) {
+          if (hasUsefulCard && card.type === "其他虚拟/临时设备") {
+            continue;
+          }
+
+          const ipv4 = card.addresses.find(
+            (a) => a.family === "IPv4" || a.family === "4",
+          );
+          const ipv6 = card.addresses.find(
+            (a) => a.family === "IPv6" || a.family === "6",
+          );
+          const primaryAddr = ipv4 || ipv6;
+
+          if (!primaryAddr) continue;
+
+          let isDefaultRouteCard = false;
+
+          // 双因子精准网关判定算法
+          if (
+            defaultRoute.interfaceName &&
+            card.name.toLowerCase() === defaultRoute.interfaceName.toLowerCase()
+          ) {
+            isDefaultRouteCard = true;
+          } else if (ipv4 && defaultRoute.gateway) {
+            isDefaultRouteCard = ipInSubnet(
+              ipv4.address,
+              defaultRoute.gateway,
+              ipv4.netmask,
+            );
+          }
+
+          let cardGateway = pc.dim("(非默认路由出口网卡)");
+          if (isDefaultRouteCard) {
+            if (defaultRoute.gateway && defaultRoute.gateway !== "0.0.0.0") {
+              cardGateway = pc.yellow(defaultRoute.gateway);
+            } else {
+              cardGateway = pc.yellow("直接点对点隧道连接 (Point-to-Point)");
+            }
+          } else if (routeError) {
+            cardGateway = pc.dim(`检测失败 (原因: ${routeError})`);
+          }
+
+          console.log(
+            pc.cyan(
+              `================ 活跃网卡及网关信息 [${card.type}] ================`,
+            ),
+          );
+          console.log(
+            `${pc.green("网卡名称 (Name):")}   ${pc.bold(card.name)}`,
+          );
+          console.log(
+            `${pc.green("本机 IP 地址 (IP):")}  ${pc.bold(primaryAddr.address)}`,
+          );
+          console.log(
+            `${pc.green("子网掩码 (Mask):")}   ${primaryAddr.netmask}`,
+          );
+          console.log(`${pc.green("默认网关 (Gateway):")} ${cardGateway}`);
+          console.log(`${pc.green("MAC 地址 (MAC):")}    ${card.mac}`);
+          console.log(
+            `${pc.green("IP 协议版本:")}       ${primaryAddr.family === "IPv4" || primaryAddr.family === "4" ? "IPv4" : "IPv6"}`,
+          );
+
+          if (ipv4 && ipv6) {
+            console.log(
+              `${pc.green("本地 IPv6 地址:")}     ${pc.dim(ipv6.address)}`,
+            );
+          }
+
+          console.log(
+            pc.cyan("===================================================="),
+          );
+          console.log("");
+        }
       } catch (error) {
         console.error(pc.red("❌ 检测失败。"));
         if (error instanceof Error) {
