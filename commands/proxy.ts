@@ -1,5 +1,5 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
+import { Command } from "commander";
+import pc from "picocolors";
 
 export function registerProxyCommand(program: Command) {
   program
@@ -39,10 +39,10 @@ export function registerProxyCommand(program: Command) {
       } else {
         // 👈 无参数时的检测逻辑
         const httpProxy =
-          Deno.env.get("http_proxy") || Deno.env.get("HTTP_PROXY");
+          process.env["http_proxy"] || process.env["HTTP_PROXY"];
         const httpsProxy =
-          Deno.env.get("https_proxy") || Deno.env.get("HTTPS_PROXY");
-        const allProxy = Deno.env.get("all_proxy") || Deno.env.get("ALL_PROXY");
+          process.env["https_proxy"] || process.env["HTTPS_PROXY"];
+        const allProxy = process.env["all_proxy"] || process.env["ALL_PROXY"];
 
         if (httpProxy || httpsProxy || allProxy) {
           console.log(pc.yellow("🔍 [xx] 检测到当前终端已配置临时代理："));

@@ -1,6 +1,14 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { dirname, resolve } from "jsr:@std/path@^1.0.0";
+import {
+  isNotFoundError,
+  runCommand,
+  spawnCommand,
+  isCommandAvailable,
+  decodeOutput,
+} from "../utils/spawn.ts";
+import fs from "node:fs/promises";
+import { Command } from "commander";
+import pc from "picocolors";
+import { dirname, resolve } from "node:path";
 
 export function registerCreateCommand(program: Command) {
   program
@@ -16,25 +24,25 @@ export function registerCreateCommand(program: Command) {
         // 1. 判断用户意图：是否以斜杠结尾
         const isDir = targetPath.endsWith("/") || targetPath.endsWith("\\");
         // 2. 解析为绝对路径
-        const absolutePath = resolve(Deno.cwd(), targetPath);
+        const absolutePath = resolve(process.cwd(), targetPath);
 
         try {
           if (isDir) {
             // 创建目录
-            await Deno.mkdir(absolutePath, { recursive: true });
+            await fs.mkdir(absolutePath, { recursive: true });
             console.log(pc.green(`✨ 成功递归创建目录: ${absolutePath}`));
           } else {
             // 创建文件：先确保其父级目录存在
             const parentDir = dirname(absolutePath);
-            await Deno.mkdir(parentDir, { recursive: true });
+            await fs.mkdir(parentDir, { recursive: true });
 
             // 检查文件是否已存在，避免意外覆盖
             try {
-              await Deno.stat(absolutePath);
+              await fs.stat(absolutePath);
               console.log(pc.yellow(`⚠️  文件已存在: ${absolutePath}`));
             } catch (err) {
-              if (err instanceof Deno.errors.NotFound) {
-                await Deno.writeTextFile(absolutePath, "");
+              if (isNotFoundError(err)) {
+                await fs.writeFile(absolutePath, "", "utf-8");
                 console.log(pc.green(`✨ 成功创建文件: ${absolutePath}`));
               } else {
                 throw err;

@@ -1,18 +1,26 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { dirname, resolve, join, basename } from "jsr:@std/path@^1.0.0";
+import {
+  isNotFoundError,
+  runCommand,
+  spawnCommand,
+  isCommandAvailable,
+  decodeOutput,
+} from "../utils/spawn.ts";
+import fs from "node:fs/promises";
+import { Command } from "commander";
+import pc from "picocolors";
+import { dirname, resolve, join, basename } from "node:path";
 
 // 递归复制逻辑
 async function copyRecursive(src: string, dest: string) {
-  const fileInfo = await Deno.stat(src);
-  if (fileInfo.isDirectory) {
-    await Deno.mkdir(dest, { recursive: true });
-    for await (const entry of Deno.readDir(src)) {
+  const fileInfo = await fs.stat(src);
+  if (fileInfo.isDirectory()) {
+    await fs.mkdir(dest, { recursive: true });
+    for (const entry of await fs.readdir(src, { withFileTypes: true })) {
       await copyRecursive(join(src, entry.name), join(dest, entry.name));
     }
-  } else if (fileInfo.isFile) {
-    await Deno.mkdir(dirname(dest), { recursive: true });
-    await Deno.copyFile(src, dest);
+  } else if (fileInfo.isFile()) {
+    await fs.mkdir(dirname(dest), { recursive: true });
+    await fs.copyFile(src, dest);
   }
 }
 
@@ -26,16 +34,16 @@ export function registerMoveCommand(program: Command) {
         return;
       }
 
-      const absSource = resolve(Deno.cwd(), source);
-      const absTarget = resolve(Deno.cwd(), target);
+      const absSource = resolve(process.cwd(), source);
+      const absTarget = resolve(process.cwd(), target);
 
       try {
-        await Deno.stat(absSource);
+        await fs.stat(absSource);
 
         let finalTarget = absTarget;
         try {
-          const targetStat = await Deno.stat(absTarget);
-          if (targetStat.isDirectory) {
+          const targetStat = await fs.stat(absTarget);
+          if (targetStat.isDirectory()) {
             finalTarget = join(absTarget, basename(absSource));
           }
         } catch {
@@ -43,18 +51,18 @@ export function registerMoveCommand(program: Command) {
         }
 
         const targetParentDir = dirname(finalTarget);
-        await Deno.mkdir(targetParentDir, { recursive: true });
+        await fs.mkdir(targetParentDir, { recursive: true });
 
         console.log(pc.cyan(`📦 正在移动: ${source} ➡️ ${target}...`));
         try {
-          await Deno.rename(absSource, finalTarget);
+          await fs.rename(absSource, finalTarget);
         } catch {
           await copyRecursive(absSource, finalTarget);
-          await Deno.remove(absSource, { recursive: true });
+          await fs.rm(absSource, { recursive: true });
         }
         console.log(pc.green(`✨ 移动成功: ${source} ➡️ ${target}`));
       } catch (err) {
-        if (err instanceof Deno.errors.NotFound) {
+        if (isNotFoundError(err)) {
           console.error(pc.red(`❌ 错误: 源路径不存在: ${absSource}`));
         } else {
           console.error(

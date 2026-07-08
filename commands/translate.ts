@@ -1,6 +1,6 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { translate } from "npm:google-translate-api-x@^10.0.0";
+import { Command } from "commander";
+import pc from "picocolors";
+import { translate } from "google-translate-api-x";
 import readline from "node:readline";
 import process from "node:process";
 

@@ -1,7 +1,10 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { join, basename, relative, resolve } from "jsr:@std/path@^1.0.0";
-import { zip } from "jsr:@deno-library/compress@^0.5.5";
+import fs from "node:fs/promises";
+import { Command } from "commander";
+import os from "node:os";
+import pc from "picocolors";
+import { join, basename, relative, resolve } from "node:path";
+import { compressZip } from "../utils/archive.ts";
+import { isNotFoundError } from "../utils/spawn.ts";
 
 const IGNORE_FILE_NAME = ".cpzipignore";
 const DEFAULT_BLACKLIST = [
@@ -14,7 +17,6 @@ const DEFAULT_BLACKLIST = [
   "*.zip",
 ];
 
-// 解析忽略文件内容
 function parseIgnoreContent(content: string): string[] {
   return content
     .split(/\r?\n/)
@@ -22,13 +24,12 @@ function parseIgnoreContent(content: string): string[] {
     .filter((line) => line && !line.startsWith("#"));
 }
 
-// 获取黑名单规则
 async function getBlacklist(absSrcDir: string): Promise<string[]> {
   const targetIgnorePath = join(absSrcDir, IGNORE_FILE_NAME);
-  const cwdIgnorePath = join(Deno.cwd(), IGNORE_FILE_NAME);
+  const cwdIgnorePath = join(process.cwd(), IGNORE_FILE_NAME);
 
   try {
-    const content = await Deno.readTextFile(targetIgnorePath);
+    const content = await fs.readFile(targetIgnorePath, "utf-8");
     console.log(pc.cyan(`[zip] 找到目标目录下的忽略文件: ${targetIgnorePath}`));
     return parseIgnoreContent(content);
   } catch {
@@ -36,11 +37,11 @@ async function getBlacklist(absSrcDir: string): Promise<string[]> {
   }
 
   try {
-    const content = await Deno.readTextFile(cwdIgnorePath);
+    const content = await fs.readFile(cwdIgnorePath, "utf-8");
     console.log(pc.cyan(`[zip] 找到当前目录下的忽略文件: ${cwdIgnorePath}`));
     return parseIgnoreContent(content);
   } catch (err) {
-    if (err instanceof Deno.errors.NotFound) {
+    if (isNotFoundError(err)) {
       console.log(pc.dim(`[zip] 未找到忽略文件，将使用内置默认过滤规则。`));
       return parseIgnoreContent(DEFAULT_BLACKLIST.join("\n"));
     }
@@ -49,7 +50,6 @@ async function getBlacklist(absSrcDir: string): Promise<string[]> {
   }
 }
 
-// 检查是否符合黑名单
 function isBlacklisted(pathStr: string, blacklist: string[]): boolean {
   const normalized = pathStr.replace(/\\/g, "/");
   const segments = normalized.split("/");
@@ -80,7 +80,6 @@ function isBlacklisted(pathStr: string, blacklist: string[]): boolean {
   return false;
 }
 
-// 递归复制
 async function copyRecursive(
   src: string,
   dest: string,
@@ -92,21 +91,20 @@ async function copyRecursive(
     return;
   }
 
-  const fileInfo = await Deno.stat(src);
+  const fileInfo = await fs.stat(src);
 
-  if (fileInfo.isDirectory) {
-    await Deno.mkdir(dest, { recursive: true });
-    for await (const entry of Deno.readDir(src)) {
+  if (fileInfo.isDirectory()) {
+    await fs.mkdir(dest, { recursive: true });
+    for (const entry of await fs.readdir(src, { withFileTypes: true })) {
       const srcPath = join(src, entry.name);
       const destPath = join(dest, entry.name);
       await copyRecursive(srcPath, destPath, baseSrc, blacklist);
     }
-  } else if (fileInfo.isFile) {
-    await Deno.copyFile(src, dest);
+  } else if (fileInfo.isFile()) {
+    await fs.copyFile(src, dest);
   }
 }
 
-// 注册 zip 子命令
 export function registerZipCommand(program: Command) {
   program
     .command("zip [directory]")
@@ -125,8 +123,8 @@ export function registerZipCommand(program: Command) {
       const absSrcDir = resolve(srcDir);
 
       try {
-        const stat = await Deno.stat(absSrcDir);
-        if (!stat.isDirectory) {
+        const stat = await fs.stat(absSrcDir);
+        if (!stat.isDirectory()) {
           console.error(pc.red(`❌ 错误: '${srcDir}' 不是一个有效的目录。`));
           return;
         }
@@ -136,13 +134,9 @@ export function registerZipCommand(program: Command) {
       }
 
       const dirName = basename(absSrcDir);
-      const outputZip = join(Deno.cwd(), `${dirName}.zip`);
-
-      // 获取黑名单规则
+      const outputZip = join(process.cwd(), `${dirName}.zip`);
       const blacklist = await getBlacklist(absSrcDir);
-
-      // 创建临时处理目录
-      const tempDir = await Deno.makeTempDir({ prefix: "cpzip_temp_" });
+      const tempDir = await fs.mkdtemp(join(os.tmpdir(), "cpzip_temp_"));
       const tempCopyTarget = join(tempDir, dirName);
 
       try {
@@ -150,14 +144,14 @@ export function registerZipCommand(program: Command) {
         await copyRecursive(absSrcDir, tempCopyTarget, absSrcDir, blacklist);
 
         console.log(pc.cyan(`⚡ 正在打包为 ZIP 压缩包...`));
-        await zip.compress(tempCopyTarget, outputZip);
+        await compressZip(tempCopyTarget, outputZip);
 
         console.log(pc.green(`✨ 打包成功！压缩包保存为: ${outputZip}`));
       } catch (error) {
         console.error(pc.red("❌ 打包失败:"), error);
       } finally {
         try {
-          await Deno.remove(tempDir, { recursive: true });
+          await fs.rm(tempDir, { recursive: true });
         } catch {
           // 忽略临时目录清理时的错
         }

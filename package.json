@@ -1,0 +1,42 @@
+{
+  "name": "@xx-in/tools",
+  "version": "0.0.6",
+  "description": "A command-line tool to run in any system",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "xx": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build",
+    "publish": "npm publish --access public",
+    "publish:npm:registry": "npm --registry=https://registry.npmjs.org/ publish --access public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "commander": "^11.1.0",
+    "fast-glob": "^3.3.3",
+    "google-translate-api-x": "^10.7.3",
+    "picocolors": "^1.1.1",
+    "prettier": "^3.8.3",
+    "tar": "^7.4.3",
+    "trash": "^8.1.1"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^22.10.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,7 +1,8 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { resolve } from "jsr:@std/path@^1.0.0";
-import { walk } from "jsr:@std/fs@^1.0.0"; // 👈 引入 Deno 高性能目录遍历工具
+import fs from "node:fs/promises";
+import { Command } from "commander";
+import pc from "picocolors";
+import { resolve, basename, relative } from "node:path";
+import fg from "fast-glob";
 
 export function registerSearchCommand(program: Command) {
   program
@@ -16,11 +17,11 @@ export function registerSearchCommand(program: Command) {
       }
 
       const startDir = directory || ".";
-      const absoluteStartDir = resolve(Deno.cwd(), startDir);
+      const absoluteStartDir = resolve(process.cwd(), startDir);
 
       try {
-        const stat = await Deno.stat(absoluteStartDir);
-        if (!stat.isDirectory) {
+        const stat = await fs.stat(absoluteStartDir);
+        if (!stat.isDirectory()) {
           console.error(pc.red(`❌ 错误: '${startDir}' 不是一个有效的目录。`));
           return;
         }
@@ -38,21 +39,38 @@ export function registerSearchCommand(program: Command) {
       let matchCount = 0;
 
       try {
-        // 使用 walk 高效递归，并排除无关干扰的大型文件夹
-        for await (const entry of walk(absoluteStartDir, {
-          skip: [/node_modules/, /\.git/, /dist/, /build/, /\.cache/],
-        })) {
-          // 模糊匹配文件名（忽略大小写）
-          if (entry.name.toLowerCase().includes(keyword.toLowerCase())) {
+        const entries = await fg("**/*", {
+          cwd: absoluteStartDir,
+          absolute: true,
+          onlyFiles: false,
+          dot: true,
+          ignore: [
+            "**/node_modules/**",
+            "**/.git/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/.cache/**",
+          ],
+        });
+
+        for (const entryPath of entries) {
+          const name = basename(entryPath);
+          if (name.toLowerCase().includes(keyword.toLowerCase())) {
             matchCount++;
-            const absolutePath = resolve(entry.path);
-            const typeIcon = entry.isDirectory ? "📁" : "📄";
+            const relativePath = relative(absoluteStartDir, entryPath);
+            const isDirectory = !name.includes(".") || entryPath.endsWith("/");
+            let isDir = isDirectory;
+            try {
+              const entryStat = await fs.stat(entryPath);
+              isDir = entryStat.isDirectory();
+            } catch {
+              // ignore
+            }
 
-            // 格式：\u001b]8;;URI\u001b\显示文本\u001b]8;;\u001b\
-            const fileUri = `file://${absolutePath}`;
-            const hyperlink = `\u001b]8;;${fileUri}\u001b\\${pc.bold(entry.name)}\u001b]8;;\u001b\\`;
+            const typeIcon = isDir ? "📁" : "📄";
+            const fileUri = `file://${entryPath}`;
+            const hyperlink = `\u001b]8;;${fileUri}\u001b\\${pc.bold(name)}\u001b]8;;\u001b\\`;
 
-            // 在其后方以暗淡颜色附加标准 file:// 绝对路径，作为老旧终端不支持超链接时的兼容兜底（同样可双击/Ctrl点击）
             console.log(`${typeIcon} ${hyperlink}  ->  ${pc.dim(fileUri)}`);
           }
         }

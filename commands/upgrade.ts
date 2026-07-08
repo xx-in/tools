@@ -1,39 +1,27 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { autoInstallCompletion } from "./completion.ts"; // 👈 引入补全脚本写入逻辑
+import { spawnCommand } from "../utils/spawn.ts";
+import { Command } from "commander";
+import pc from "picocolors";
+import { autoInstallCompletion } from "./completion.ts";
 
 export function registerUpgradeCommand(program: Command) {
   program
     .command("upgrade")
     .description("检查并自动更新 xx 命令行工具至最新版本")
-    .action(async () => {
+    .option("-r, --registry", "强制使用 npm 官方源 https://registry.npmjs.org/")
+    .action(async (options: { registry?: boolean }) => {
+      const args = ["install", "-g"];
+      if (options.registry) {
+        args.push("--registry=https://registry.npmjs.org/");
+      }
+      args.push("@xx-in/tools@latest");
+
       console.log(pc.cyan("🤖 正在为您检查并更新 xx 命令行工具..."));
-      console.log(
-        pc.dim(
-          "执行命令: deno install --global -n xx -A -f jsr:@xxin/tools/bin\n",
-        ),
-      );
+      console.log(pc.dim(`执行命令: npm ${args.join(" ")}\n`));
 
       try {
-        const command = new Deno.Command("deno", {
-          args: [
-            "install",
-            "--global",
-            "-n",
-            "xx",
-            "-A",
-            "-f",
-            "jsr:@xxin/tools/bin",
-          ],
-          stdout: "inherit",
-          stderr: "inherit",
-        });
-
-        const process = command.spawn();
-        const status = await process.status;
+        const status = await spawnCommand("npm", args);
 
         if (status.success) {
-          // 👈 覆盖重装二进制成功后，直接强制执行补全文件的写入（无视之前是否存在，强行刷新）
           console.log(
             pc.cyan("\n🤖 正在为您强制覆盖并刷新终端自动补全脚本..."),
           );
@@ -49,7 +37,7 @@ export function registerUpgradeCommand(program: Command) {
       } catch (err) {
         console.error(
           pc.red(
-            "\n❌ 无法执行更新命令，请确认系统环境变量中是否已正确配置 Deno。",
+            "\n❌ 无法执行更新命令，请确认系统环境变量中是否已正确配置 Node.js 与 npm。",
           ),
         );
         if (err instanceof Error) {

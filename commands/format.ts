@@ -1,13 +1,14 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { resolve, join } from "jsr:@std/path@^1.0.0";
+import fs from "node:fs/promises";
+import { Command } from "commander";
+import pc from "picocolors";
+import { resolve, join } from "node:path";
 // 👈 使用具名导入 getFileInfo, resolveConfig, format
-import { getFileInfo, resolveConfig, format } from "npm:prettier@^3.0.0";
+import { getFileInfo, resolveConfig, format } from "prettier";
 
 // 递归获取所有文件路径（过滤常见无需遍历的文件夹）
 async function getFilesRecursively(dirPath: string): Promise<string[]> {
   const files: string[] = [];
-  const entries = await Deno.readDir(dirPath);
+  const entries = await fs.readdir(dirPath, { withFileTypes: true });
 
   for await (const entry of entries) {
     const fullPath = join(dirPath, entry.name);
@@ -19,9 +20,9 @@ async function getFilesRecursively(dirPath: string): Promise<string[]> {
       continue;
     }
 
-    if (entry.isDirectory) {
+    if (entry.isDirectory()) {
       files.push(...(await getFilesRecursively(fullPath)));
-    } else if (entry.isFile) {
+    } else if (entry.isFile()) {
       files.push(fullPath);
     }
   }
@@ -34,16 +35,16 @@ export function registerFormatCommand(program: Command) {
     .description("使用 Prettier 自动格式化代码文件或目录中的所有文件")
     .action(async (targetPath: string | undefined) => {
       const inputPath = targetPath || ".";
-      const absolutePath = resolve(Deno.cwd(), inputPath);
+      const absolutePath = resolve(process.cwd(), inputPath);
 
       let targetFiles: string[] = [];
 
       try {
-        const stat = await Deno.stat(absolutePath);
-        if (stat.isDirectory) {
+        const stat = await fs.stat(absolutePath);
+        if (stat.isDirectory()) {
           console.log(pc.cyan(`🔍 正在扫描目录中的文件: ${absolutePath}...`));
           targetFiles = await getFilesRecursively(absolutePath);
-        } else if (stat.isFile) {
+        } else if (stat.isFile()) {
           targetFiles = [absolutePath];
         }
       } catch {
@@ -73,7 +74,7 @@ export function registerFormatCommand(program: Command) {
           }
 
           // 2. 读取源文件
-          const content = await Deno.readTextFile(filePath);
+          const content = await fs.readFile(filePath, "utf-8");
 
           // 3. 尝试解析当前文件适用的本地 Prettier 配置文件 (e.g. .prettierrc)
           const config = (await resolveConfig(filePath)) || {}; // 👈 直接调用 resolveConfig
@@ -87,7 +88,7 @@ export function registerFormatCommand(program: Command) {
 
           // 5. 若有改动则写回文件
           if (content !== formatted) {
-            await Deno.writeTextFile(filePath, formatted);
+            await fs.writeFile(filePath, formatted, "utf-8");
             console.log(pc.green(`✔ 已格式化: ${filePath}`));
           } else {
             console.log(pc.dim(`➖ 无需修改: ${filePath}`));

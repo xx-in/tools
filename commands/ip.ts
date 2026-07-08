@@ -1,5 +1,12 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
+import {
+  isNotFoundError,
+  runCommand,
+  spawnCommand,
+  isCommandAvailable,
+  decodeOutput,
+} from "../utils/spawn.ts";
+import { Command } from "commander";
+import pc from "picocolors";
 import os from "node:os";
 
 // 网卡数据结构
@@ -187,11 +194,11 @@ function getActiveNetworkCards(): NetworkCard[] {
 
 // 获取默认网关
 async function getDefaultRouteInfo(): Promise<DefaultRoute> {
-  const platform = Deno.build.os;
+  const platform = process.platform;
   let cmd = "";
   let args: string[] = [];
 
-  if (platform === "windows") {
+  if (platform === "win32") {
     cmd = "powershell";
     args = [
       "-NoProfile",
@@ -208,20 +215,14 @@ async function getDefaultRouteInfo(): Promise<DefaultRoute> {
     throw new Error("当前系统暂不支持网关及默认路由设备检测");
   }
 
-  const command = new Deno.Command(cmd, {
-    args: args,
-    stdout: "piped",
-    stderr: "piped",
-  });
-
-  const { success, stdout, stderr } = await command.output();
+  const { success, stdout, stderr } = await runCommand(cmd, args);
 
   if (!success) {
-    const errorString = new TextDecoder().decode(stderr);
+    const errorString = decodeOutput(stderr);
     throw new Error(errorString || "执行系统路由表查询命令失败");
   }
 
-  const output = new TextDecoder().decode(stdout).trim();
+  const output = decodeOutput(stdout).trim();
   if (!output) {
     throw new Error("系统路由表中未检索到任何默认路由配置");
   }
@@ -243,7 +244,7 @@ async function getDefaultRouteInfo(): Promise<DefaultRoute> {
       routeInfo.gateway = viaMatch ? viaMatch[1].trim() : "";
       routeInfo.interfaceName = devMatch ? devMatch[1].trim() : "";
     }
-  } else if (platform === "windows") {
+  } else if (platform === "win32") {
     try {
       const parsed = JSON.parse(output);
       const activeRoute = Array.isArray(parsed) ? parsed[0] : parsed;

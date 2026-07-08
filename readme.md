@@ -2,10 +2,46 @@
 
 终端命令行工具，跨平台统一工具。
 
-## 安装为全局脚本
+## 安装为全局命令
 
 ```sh
-deno install --global -n xx -A -f jsr:@xxin/tools/bin
+npm install -g @xx-in/tools
+```
+
+安装完成后，终端中可使用 `xx <命令>` 运行各子功能。更新到最新版：
+
+```sh
+xx upgrade
+# 或
+npm install -g @xx-in/tools@latest
+
+# 如果当前环境配置了其他 npm 源，可强制走官方源
+xx upgrade -r
+```
+
+## 临时指定 npm 官方源
+
+如果你本机默认配置了其他 npm 源，安装、升级或发布时可以临时指定官方源，而不影响全局配置：
+
+```sh
+# 安装
+npm --registry=https://registry.npmjs.org/ install -g @xx-in/tools
+
+# 升级
+npm --registry=https://registry.npmjs.org/ install -g @xx-in/tools@latest
+
+# 发布
+npm --registry=https://registry.npmjs.org/ publish --access public
+```
+
+也可以直接使用项目内置脚本：
+
+```sh
+# 常规发布
+npm run publish:npm
+
+# 强制走 npm 官方源发布
+npm run publish:npm:registry
 ```
 
 ## 功能列表
@@ -29,12 +65,14 @@ deno install --global -n xx -A -f jsr:@xxin/tools/bin
 - **`open [path]`**：文件管理器目录打开工具。
   - 在系统内置文件管理器中打开指定目录。若未提供参数，则默认打开当前的工作目录。
 
-### 2. Linux 桌面应用管理
+### 2. 本地工具安装管理
 
-- **`application`**：Linux 桌面应用辅助管理工具集，包含以下嵌套子命令 [3]：
-  - **`shortcut <path>`**：为本地 AppImage、普通可执行二进制文件、或 Flatpak 应用 ID（例如 `org.gimp.GIMP`）生成标准的 Linux `.desktop` 快捷文件并放置到系统的应用选单中 [3]。
-  - **`install <path>`**：安装软件包。支持本地 `.deb` 安装包，或解压 `.tar.gz` 绿色软件（自动释放到 `~/GreenApp/` [3]，并自适应扫描根目录下的执行文件创建图标）。
-  - **`remove <package>`**：卸载已安装的软件包。支持传入包名或本地 `.deb` 路径（将自动分析提取其 Metadata 进行安全卸载）。
+- **`install <path>`**：macOS / Windows 本地工具安装器。
+  - 支持安装单个可执行文件，以及 `.zip`、`.tar.gz`、`.tgz`、`.tar.xz`、`.txz`、`.tar` 压缩包。
+  - 自动安装到 `~/.xx-tools/apps/`，并在 `~/.xx-tools/bin/` 创建终端命令入口。
+  - macOS 下会自动写入 Shell 配置；Windows 下会自动写入当前用户 PATH，后续即可在终端中直接调用已安装工具。
+- **`uninstall <package>`**：macOS / Windows 本地工具卸载器。
+  - 按安装名卸载工具，同时删除安装目录和终端命令入口。
 
 ### 3. 压缩与解压
 

@@ -1,6 +1,7 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { resolve } from "jsr:@std/path@^1.0.0";
+import fs from "node:fs/promises";
+import { Command } from "commander";
+import pc from "picocolors";
+import { resolve } from "node:path";
 
 export function registerLsCommand(program: Command) {
   program
@@ -8,17 +9,19 @@ export function registerLsCommand(program: Command) {
     .description("列出目录中的所有文件和目录（含隐藏项）")
     .action(async (targetPath: string | undefined) => {
       const inputPath = targetPath || ".";
-      const absolutePath = resolve(Deno.cwd(), inputPath);
+      const absolutePath = resolve(process.cwd(), inputPath);
 
       try {
-        const stat = await Deno.stat(absolutePath);
-        if (!stat.isDirectory) {
+        const stat = await fs.stat(absolutePath);
+        if (!stat.isDirectory()) {
           console.error(pc.red(`❌ 错误: '${inputPath}' 不是一个有效的目录。`));
           return;
         }
 
-        const entries: Deno.DirEntry[] = [];
-        for await (const entry of Deno.readDir(absolutePath)) {
+        const entries: import("node:fs").Dirent[] = [];
+        for (const entry of await fs.readdir(absolutePath, {
+          withFileTypes: true,
+        })) {
           entries.push(entry);
         }
 
@@ -29,8 +32,8 @@ export function registerLsCommand(program: Command) {
 
         // 排序规则：文件夹排在前面，普通项排在隐藏项前面，字母升序排序
         entries.sort((a, b) => {
-          if (a.isDirectory && !b.isDirectory) return -1;
-          if (!a.isDirectory && b.isDirectory) return 1;
+          if (a.isDirectory() && !b.isDirectory()) return -1;
+          if (!a.isDirectory() && b.isDirectory()) return 1;
           return a.name.localeCompare(b.name);
         });
 
@@ -38,7 +41,7 @@ export function registerLsCommand(program: Command) {
         for (const entry of entries) {
           const isHidden = entry.name.startsWith(".");
 
-          if (entry.isDirectory) {
+          if (entry.isDirectory()) {
             if (isHidden) {
               console.log(pc.dim(`📁 ${pc.blue(entry.name)}/`));
             } else {

@@ -1,8 +1,10 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { resolve } from "jsr:@std/path@^1.0.0";
-import { expandGlob } from "jsr:@std/fs@^1.0.0";
-import trash from "npm:trash@^8.0.0";
+import fs from "node:fs/promises";
+import { Command } from "commander";
+import pc from "picocolors";
+import { resolve } from "node:path";
+import fg from "fast-glob";
+import trash from "trash";
+import { isNotFoundError } from "../utils/spawn.ts";
 
 export function registerRemoveCommand(program: Command) {
   program
@@ -22,10 +24,14 @@ export function registerRemoveCommand(program: Command) {
 
         if (isGlob) {
           try {
-            for await (const entry of expandGlob(pattern, {
-              root: Deno.cwd(),
-            })) {
-              resolvedPathsToDelete.add(entry.path);
+            const matches = await fg(pattern, {
+              cwd: process.cwd(),
+              absolute: true,
+              onlyFiles: false,
+              dot: true,
+            });
+            for (const entry of matches) {
+              resolvedPathsToDelete.add(entry);
             }
           } catch (err) {
             console.error(
@@ -34,12 +40,12 @@ export function registerRemoveCommand(program: Command) {
             );
           }
         } else {
-          const absolutePath = resolve(Deno.cwd(), pattern);
+          const absolutePath = resolve(process.cwd(), pattern);
           try {
-            await Deno.stat(absolutePath);
+            await fs.stat(absolutePath);
             resolvedPathsToDelete.add(absolutePath);
           } catch (err) {
-            if (err instanceof Deno.errors.NotFound) {
+            if (isNotFoundError(err)) {
               notFoundPaths.push(absolutePath);
             } else {
               console.error(
@@ -51,7 +57,6 @@ export function registerRemoveCommand(program: Command) {
         }
       }
 
-      // 1. 若存在找不到的路径，打印相应的提示
       if (notFoundPaths.length > 0) {
         for (const path of notFoundPaths) {
           console.error(pc.red(`❌ 路径不存在: ${path}`));
@@ -63,7 +68,6 @@ export function registerRemoveCommand(program: Command) {
         return;
       }
 
-      // 2. 直接执行批量移动动作（无中断，极致流畅）
       try {
         console.log(
           pc.cyan(
@@ -73,7 +77,6 @@ export function registerRemoveCommand(program: Command) {
 
         await trash(Array.from(resolvedPathsToDelete));
 
-        // 打印详细的移动路径，让用户明确知晓结果
         for (const path of resolvedPathsToDelete) {
           console.log(pc.dim(`  - 已移入垃圾箱: ${path}`));
         }

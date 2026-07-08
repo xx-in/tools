@@ -1,6 +1,8 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { resolve } from "jsr:@std/path@^1.0.0";
+import { spawnCommand } from "../utils/spawn.ts";
+import fs from "node:fs/promises";
+import { Command } from "commander";
+import pc from "picocolors";
+import { resolve } from "node:path";
 
 export function registerOpenCommand(program: Command) {
   program
@@ -8,12 +10,12 @@ export function registerOpenCommand(program: Command) {
     .description("在系统文件管理器中打开指定目录（默认当前工作目录）")
     .action(async (targetPath: string | undefined) => {
       const inputPath = targetPath || ".";
-      const absolutePath = resolve(Deno.cwd(), inputPath);
+      const absolutePath = resolve(process.cwd(), inputPath);
 
       // 验证目标路径是否存在且确实是一个目录
       try {
-        const stat = await Deno.stat(absolutePath);
-        if (!stat.isDirectory) {
+        const stat = await fs.stat(absolutePath);
+        if (!stat.isDirectory()) {
           console.error(pc.red(`❌ 错误: '${inputPath}' 不是一个有效的目录。`));
           return;
         }
@@ -22,7 +24,7 @@ export function registerOpenCommand(program: Command) {
         return;
       }
 
-      const os = Deno.build.os;
+      const os = process.platform;
       let cmd = "";
       let args: string[] = [];
 
@@ -30,7 +32,7 @@ export function registerOpenCommand(program: Command) {
       if (os === "darwin") {
         cmd = "open";
         args = [absolutePath];
-      } else if (os === "windows") {
+      } else if (os === "win32") {
         cmd = "explorer";
         args = [absolutePath];
       } else if (os === "linux") {
@@ -43,12 +45,7 @@ export function registerOpenCommand(program: Command) {
 
       try {
         console.log(pc.cyan(`📂 正在打开文件夹: ${absolutePath}...`));
-        const command = new Deno.Command(cmd, {
-          args: args,
-          stdout: "null",
-          stderr: "null",
-        });
-        await command.spawn().status;
+        await spawnCommand(cmd, args);
         console.log(pc.green("✨ 成功调起文件管理器！"));
       } catch (err) {
         console.error(

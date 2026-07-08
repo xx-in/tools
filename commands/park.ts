@@ -1,6 +1,8 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { join, isAbsolute, resolve, dirname } from "jsr:@std/path@^1.0.0";
+import fs, { open } from "node:fs/promises";
+import process from "node:process";
+import { Command } from "commander";
+import pc from "picocolors";
+import { join, isAbsolute, resolve, dirname } from "node:path";
 
 const CONFIG_FILE_NAME = ".park_config.json";
 
@@ -11,7 +13,7 @@ interface Config {
 // 获取全局配置文件路径
 function getConfigFile(): string {
   const home =
-    Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || Deno.cwd();
+    process.env["HOME"] || process.env["USERPROFILE"] || process.cwd();
   return join(home, CONFIG_FILE_NAME);
 }
 
@@ -19,7 +21,7 @@ function getConfigFile(): string {
 async function readConfig(): Promise<Config> {
   try {
     const path = getConfigFile();
-    const content = await Deno.readTextFile(path);
+    const content = await fs.readFile(path, "utf-8");
     return JSON.parse(content);
   } catch {
     return {};
@@ -30,7 +32,7 @@ async function readConfig(): Promise<Config> {
 async function writeConfig(config: Config): Promise<void> {
   try {
     const path = getConfigFile();
-    await Deno.writeTextFile(path, JSON.stringify(config, null, 2));
+    await fs.writeFile(path, JSON.stringify(config, null, 2));
   } catch (err) {
     console.error(pc.red("❌ 写入全局配置文件失败:"), err);
   }
@@ -133,12 +135,12 @@ async function downloadImage(
     // 4. 解析目标下载目录
     let downloadDir: string;
     if (targetDir) {
-      downloadDir = resolve(Deno.cwd(), targetDir);
+      downloadDir = resolve(process.cwd(), targetDir);
     } else {
       const config = await readConfig();
       downloadDir = config.defaultDownloadDir
         ? config.defaultDownloadDir
-        : Deno.cwd();
+        : process.cwd();
     }
 
     // 确定最终保存文件路径
@@ -150,16 +152,12 @@ async function downloadImage(
     // 在必要时创建目标文件夹
     const targetDirToCreate = dirname(finalPath);
     try {
-      await Deno.mkdir(targetDirToCreate, { recursive: true });
+      await fs.mkdir(targetDirToCreate, { recursive: true });
     } catch {
       // 忽略目录已存在的报错
     }
 
-    const file = await Deno.open(finalPath, {
-      write: true,
-      create: true,
-      truncate: true,
-    });
+    const file = await open(finalPath, "w");
 
     if (downloadRes.body) {
       const reader = downloadRes.body.getReader();
@@ -174,21 +172,17 @@ async function downloadImage(
             const percent = ((downloadedBytes / totalBytes) * 100).toFixed(2);
             const mb = (downloadedBytes / 1024 / 1024).toFixed(2);
             const totalMb = (totalBytes / 1024 / 1024).toFixed(2);
-            Deno.stdout.writeSync(
-              new TextEncoder().encode(
-                `\r📥 进度: ${percent}% (${mb} MB / ${totalMb} MB)`,
-              ),
+            process.stdout.write(
+              `\r📥 进度: ${percent}% (${mb} MB / ${totalMb} MB)`,
             );
           } else {
             const mb = (downloadedBytes / 1024 / 1024).toFixed(2);
-            Deno.stdout.writeSync(
-              new TextEncoder().encode(`\r📥 已下载: ${mb} MB`),
-            );
+            process.stdout.write(`\r📥 已下载: ${mb} MB`);
           }
         }
       }
     }
-    file.close();
+    await file.close();
     console.log("\n" + pc.green(`✨ 下载并保存成功! 文件路径: ${finalPath}`));
   } catch (error: unknown) {
     console.error(pc.red("\n❌ 执行失败。"));
@@ -216,7 +210,7 @@ export function registerParkCommand(program: Command) {
       ): Promise<void> => {
         // 1. 设置全局默认下载目录
         if (options.global) {
-          const absPath = resolve(Deno.cwd(), options.global);
+          const absPath = resolve(process.cwd(), options.global);
           await writeConfig({ defaultDownloadDir: absPath });
           console.log(pc.green(`✨ 已成功设置全局默认下载目录为: ${absPath}`));
           return;

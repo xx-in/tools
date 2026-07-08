@@ -1,6 +1,7 @@
-import { Command } from "npm:commander@^11.0.0";
-import pc from "npm:picocolors@^1.0.0";
-import { join } from "jsr:@std/path@^1.0.0";
+import fs from "node:fs/promises";
+import { Command } from "commander";
+import pc from "picocolors";
+import { join } from "node:path";
 
 // --- Zsh 补全脚本模板 ---
 const ZSH_SCRIPT = `
@@ -23,7 +24,7 @@ _xx() {
         'create:递归创建文件或目录'
         'format:使用 Prettier 格式化代码'
         'help:显示指定命令的帮助信息'
-        'install:自动分发部署安装包 (支持 AppImage、Flatpak ID、tar.gz、deb、rpm)'
+        'install:macOS/Windows 本地工具安装器 (支持可执行文件、zip、tar 包)'
         'ip:本地活跃网卡及网关侦测'
         'list:列出目录中的所有文件和目录（含隐藏项）'
         'move:移动或重命名文件及目录'
@@ -33,7 +34,7 @@ _xx() {
         'remove:安全地将指定的文件或目录移至系统回收站（支持通配符及多选）'
         'search:递归搜索目录下包含指定关键词的文件或目录'
         'translate:终端翻译工具'
-        'uninstall:通用应用卸载器（支持包名、Flatpak、Snap、本地包或绿色软件）'
+        'uninstall:macOS/Windows 本地工具卸载器（移除安装目录和终端命令入口）'
         'unzip:解压 ZIP 压缩包'
         'upgrade:自动更新 xx 命令行工具至最新版本'
         'zip:自动过滤并打包为 ZIP'
@@ -55,6 +56,10 @@ _xx() {
           _arguments \\
             '*:Target Path:_files'
           ;;
+        install)
+          _arguments \\
+            '*:Install Package:_files'
+          ;;
         help)
           local -a sub_cmds
           sub_cmds=(
@@ -62,7 +67,7 @@ _xx() {
             'copy:复制文件或目录（支持递归复制）'
             'create:递归创建文件或目录'
             'format:使用 Prettier 格式化代码'
-            'install:自动分发部署安装包 (支持 AppImage、Flatpak ID、tar.gz、deb、rpm)'
+            'install:macOS/Windows 本地工具安装器 (支持可执行文件、zip、tar 包)'
             'ip:本地活跃网卡及网关侦测'
             'list:列出目录中的所有文件和目录（含隐藏项）'
             'move:移动或重命名文件及目录'
@@ -72,7 +77,7 @@ _xx() {
             'remove:安全地将指定的文件或目录移至系统回收站（支持通配符及多选）'
             'search:递归搜索目录下包含指定关键词的文件或目录'
             'translate:终端翻译工具'
-            'uninstall:通用应用卸载器（支持包名、Flatpak、Snap、本地包或绿色软件）'
+            'uninstall:macOS/Windows 本地工具卸载器（移除安装目录和终端命令入口）'
             'unzip:解压 ZIP 压缩包'
             'upgrade:自动更新 xx 命令行工具至最新版本'
             'zip:自动过滤并打包为 ZIP'
@@ -111,12 +116,16 @@ _xx() {
           ;;
         uninstall)
           _arguments \\
-            '*:Package Path:_files'
+            '*:Installed App:'
           ;;
         unzip)
           _arguments \\
             '-d[指定解压到的目标目录路径]:directory:_files -/' \\
             '*:Zip File:_files -g "*.zip"'
+          ;;
+        upgrade)
+          _arguments \\
+            '-r[强制使用 npm 官方源 https://registry.npmjs.org/]'
           ;;
         zip)
           _arguments \\
@@ -202,6 +211,15 @@ _xx_completion() {
             COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
             return 0
             ;;
+        install|uninstall)
+            COMPREPLY=( \$(compgen -f -- "\${cur}") )
+            return 0
+            ;;
+        upgrade)
+            local sub_opts="-r --registry"
+            COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
+            return 0
+            ;;
         help)
             local sub_opts="completion copy create format ip list move open park proxy remove search translate uninstall unzip upgrade zip"
             COMPREPLY=( \$(compgen -W "\${sub_opts}" -- \${cur}) )
@@ -258,6 +276,7 @@ const POWERSHELL_SCRIPT = `
         "park" = @("-d", "-o", "-g")
         "proxy" = @("on", "off")
         "unzip" = @("-d")
+        "upgrade" = @("-r", "--registry")
         "translate" = @("-t")
         "help" = @("completion", "copy", "create", "format", "ip", "list", "move", "open", "park", "proxy", "remove", "search", "translate", "uninstall", "unzip", "upgrade", "zip")
     }
@@ -323,15 +342,15 @@ function xx {
 
 // 自动化安装实现 (增加了在 Windows 下强制写入 UTF-8 BOM 编码的机制)
 export async function autoInstallCompletion() {
-  const osType = Deno.build.os;
-  const home = Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || "";
+  const osType = process.platform;
+  const home = process.env["HOME"] || process.env["USERPROFILE"] || "";
 
   if (!home) {
     console.error(pc.red("❌ 错误: 无法定位到用户的根目录。"));
     return;
   }
 
-  if (osType === "windows") {
+  if (osType === "win32") {
     const completionPath = join(home, ".xx_completion_xx.ps1");
 
     try {
@@ -343,7 +362,7 @@ export async function autoInstallCompletion() {
       mergedBytes.set(contentBytes, bom.length);
 
       // 直接写入合并后的带有 BOM 的二进制字节流
-      await Deno.writeFile(completionPath, mergedBytes);
+      await fs.writeFile(completionPath, mergedBytes);
       console.log(
         pc.green(
           `✔ 已创建并覆盖 PowerShell 补全脚本 (UTF-8 BOM): ${pc.bold(completionPath)}`,
@@ -363,11 +382,11 @@ export async function autoInstallCompletion() {
       for (const dir of profileDirs) {
         try {
           const profilePath = join(dir, "Microsoft.PowerShell_profile.ps1");
-          await Deno.mkdir(dir, { recursive: true });
+          await fs.mkdir(dir, { recursive: true });
 
           let content = "";
           try {
-            content = await Deno.readTextFile(profilePath);
+            content = await fs.readFile(profilePath, "utf-8");
           } catch {
             // ignore
           }
@@ -375,7 +394,7 @@ export async function autoInstallCompletion() {
           if (!content.includes(sourceLine)) {
             const separator =
               content.endsWith("\n") || content === "" ? "" : "\n";
-            await Deno.writeTextFile(
+            await fs.writeFile(
               profilePath,
               `${content}${separator}${sourceLine}\n`,
             );
@@ -405,7 +424,7 @@ export async function autoInstallCompletion() {
       );
     }
   } else {
-    const shellEnv = Deno.env.get("SHELL") || "";
+    const shellEnv = process.env["SHELL"] || "";
     let shell = "zsh";
     let profileName = ".zshrc";
     let scriptContent = ZSH_SCRIPT;
@@ -430,7 +449,7 @@ export async function autoInstallCompletion() {
     const profilePath = join(home, profileName);
 
     try {
-      await Deno.writeTextFile(completionPath, scriptContent.trim());
+      await fs.writeFile(completionPath, scriptContent.trim());
       console.log(
         pc.green(
           `✔ 已创建并覆盖 ${shell} 补全脚本: ${pc.bold(completionPath)}`,
@@ -439,7 +458,7 @@ export async function autoInstallCompletion() {
 
       let profileContent = "";
       try {
-        profileContent = await Deno.readTextFile(profilePath);
+        profileContent = await fs.readFile(profilePath, "utf-8");
       } catch {
         // ignore
       }
@@ -448,7 +467,7 @@ export async function autoInstallCompletion() {
       if (!profileContent.includes(sourceLine)) {
         const separator =
           profileContent.endsWith("\n") || profileContent === "" ? "" : "\n";
-        await Deno.writeTextFile(
+        await fs.writeFile(
           profilePath,
           `${profileContent}${separator}${sourceLine}\n`,
         );
