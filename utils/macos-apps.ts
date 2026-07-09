@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { basename, delimiter, extname, join } from "node:path";
-import pc from "picocolors";
+import c from "./colors.ts";
 import { spawnCommand, runCommand, decodeOutput } from "./spawn.ts";
 import { uncompressZip } from "./archive.ts";
 
@@ -38,7 +38,7 @@ export function getManifestPath(appName: string): string {
 export function ensureSupportedDesktopOS(): boolean {
   if (process.platform !== "darwin" && process.platform !== "win32") {
     console.error(
-      pc.red("❌ 当前 install/uninstall 仅支持 macOS 和 Windows。"),
+      c.error("❌ 当前 install/uninstall 仅支持 macOS 和 Windows。"),
     );
     return false;
   }
@@ -91,7 +91,7 @@ ${PATH_MARKER_END}`;
         `${content}${separator}${pathBlock}\n`,
         "utf-8",
       );
-      console.log(pc.green(`✔ 已写入 PATH 配置: ${profilePath}`));
+      console.log(c.success(`✔ 已写入 PATH 配置: ${profilePath}`));
     }
   }
 }
@@ -129,9 +129,9 @@ async function ensureWindowsBinDirOnPath(): Promise<void> {
   if (success) {
     const output = decodeOutput(stdout).trim();
     if (output.includes("UPDATED")) {
-      console.log(pc.green(`✔ 已写入用户 PATH: ${binDir}`));
+      console.log(c.success(`✔ 已写入用户 PATH: ${binDir}`));
     } else if (!alreadyInCurrentEnv) {
-      console.log(pc.dim(`➖ 用户 PATH 中已存在: ${binDir}`));
+      console.log(c.dim(`➖ 用户 PATH 中已存在: ${binDir}`));
     }
   }
 }
@@ -258,8 +258,8 @@ export async function createLinks(
 
   if (linkNames.length > 0) {
     console.log(
-      pc.green(
-        `✔ 已为 ${pc.bold(appName)} 创建终端命令: ${linkNames.join(", ")}`,
+      c.success(
+        `✔ 已为 ${c.bold(appName)} 创建终端命令: ${linkNames.join(", ")}`,
       ),
     );
   }
@@ -299,11 +299,11 @@ export async function removeInstalledApp(appName: string): Promise<boolean> {
     } else {
       await fs.rm(join(getBinDir(), linkName), { force: true });
     }
-    console.log(pc.green(`✔ 已移除终端命令: ${linkName}`));
+    console.log(c.success(`✔ 已移除终端命令: ${linkName}`));
   }
 
   await fs.rm(manifest.installDir, { recursive: true, force: true });
-  console.log(pc.green(`✔ 已移除安装目录: ${manifest.installDir}`));
+  console.log(c.success(`✔ 已移除安装目录: ${manifest.installDir}`));
   return true;
 }
 

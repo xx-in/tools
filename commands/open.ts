@@ -1,7 +1,7 @@
 import { spawnCommand } from "../utils/spawn.ts";
 import fs from "node:fs/promises";
 import { Command } from "commander";
-import pc from "picocolors";
+import c from "../utils/colors.ts";
 import { resolve } from "node:path";
 
 export function registerOpenCommand(program: Command) {
@@ -16,11 +16,13 @@ export function registerOpenCommand(program: Command) {
       try {
         const stat = await fs.stat(absolutePath);
         if (!stat.isDirectory()) {
-          console.error(pc.red(`❌ 错误: '${inputPath}' 不是一个有效的目录。`));
+          console.error(
+            c.error(`❌ 错误: '${inputPath}' 不是一个有效的目录。`),
+          );
           return;
         }
       } catch {
-        console.error(pc.red(`❌ 错误: 找不到目录 '${inputPath}'。`));
+        console.error(c.error(`❌ 错误: 找不到目录 '${inputPath}'。`));
         return;
       }
 
@@ -39,17 +41,17 @@ export function registerOpenCommand(program: Command) {
         cmd = "xdg-open";
         args = [absolutePath];
       } else {
-        console.error(pc.red("❌ 暂不支持在当前系统下调起文件管理器。"));
+        console.error(c.error("❌ 暂不支持在当前系统下调起文件管理器。"));
         return;
       }
 
       try {
-        console.log(pc.cyan(`📂 正在打开文件夹: ${absolutePath}...`));
+        console.log(c.info(`📂 正在打开文件夹: ${absolutePath}...`));
         await spawnCommand(cmd, args);
-        console.log(pc.green("✨ 成功调起文件管理器！"));
+        console.log(c.success("✨ 成功调起文件管理器！"));
       } catch (err) {
         console.error(
-          pc.red("❌ 无法打开管理器:"),
+          c.error("❌ 无法打开管理器:"),
           err instanceof Error ? err.message : err,
         );
       }

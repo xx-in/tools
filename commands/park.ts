@@ -1,7 +1,7 @@
 import fs, { open } from "node:fs/promises";
 import process from "node:process";
 import { Command } from "commander";
-import pc from "picocolors";
+import c from "../utils/colors.ts";
 import { join, isAbsolute, resolve, dirname } from "node:path";
 
 const CONFIG_FILE_NAME = ".park_config.json";
@@ -34,7 +34,7 @@ async function writeConfig(config: Config): Promise<void> {
     const path = getConfigFile();
     await fs.writeFile(path, JSON.stringify(config, null, 2));
   } catch (err) {
-    console.error(pc.red("❌ 写入全局配置文件失败:"), err);
+    console.error(c.error("❌ 写入全局配置文件失败:"), err);
   }
 }
 
@@ -54,8 +54,8 @@ async function downloadImage(
   }
 
   const fullImageName = prefix + cleanName;
-  console.log(pc.cyan(`📦 目标镜像: ${pc.bold(fullImageName)}`));
-  console.log(pc.dim("正在向打包服务器提交任务，请稍候...\n"));
+  console.log(c.info(`📦 目标镜像: ${c.bold(fullImageName)}`));
+  console.log(c.dim("正在向打包服务器提交任务，请稍候...\n"));
 
   try {
     // 1. 发送 POST 请求触发打包
@@ -101,18 +101,18 @@ async function downloadImage(
         matchedFilename = match[0];
         downloadUrl = `https://city189.cn:1091/download/${matchedFilename}`;
       } else {
-        console.error(pc.red("❌ 未能在服务器响应中匹配到打包文件名。"));
-        console.log(pc.yellow("服务器原始响应如下："));
+        console.error(c.error("❌ 未能在服务器响应中匹配到打包文件名。"));
+        console.log(c.warn("服务器原始响应如下："));
         console.log(text);
         throw new Error("无法提取打包后的文件名");
       }
     }
 
-    console.log(pc.green(`✅ 打包任务提交成功!`));
-    console.log(pc.green(`🔗 下载链接: ${pc.underline(downloadUrl)}`));
+    console.log(c.success(`✅ 打包任务提交成功!`));
+    console.log(c.success(`🔗 下载链接: ${c.link(downloadUrl)}`));
 
     // 3. 执行 GET 请求进行下载
-    console.log(pc.cyan(`\n📥 开始下载: ${matchedFilename}...`));
+    console.log(c.info(`\n📥 开始下载: ${matchedFilename}...`));
     const downloadRes = await fetch(downloadUrl, {
       headers: {
         "content-type": "application/x-www-form-urlencoded",
@@ -183,11 +183,11 @@ async function downloadImage(
       }
     }
     await file.close();
-    console.log("\n" + pc.green(`✨ 下载并保存成功! 文件路径: ${finalPath}`));
+    console.log("\n" + c.success(`✨ 下载并保存成功! 文件路径: ${finalPath}`));
   } catch (error: unknown) {
-    console.error(pc.red("\n❌ 执行失败。"));
+    console.error(c.error("\n❌ 执行失败。"));
     if (error instanceof Error) {
-      console.error(pc.red("错误详情:"), error.message);
+      console.error(c.error("错误详情:"), error.message);
     }
   }
 }
@@ -212,13 +212,13 @@ export function registerParkCommand(program: Command) {
         if (options.global) {
           const absPath = resolve(process.cwd(), options.global);
           await writeConfig({ defaultDownloadDir: absPath });
-          console.log(pc.green(`✨ 已成功设置全局默认下载目录为: ${absPath}`));
+          console.log(c.success(`✨ 已成功设置全局默认下载目录为: ${absPath}`));
           return;
         }
 
         // 2. 正常下载逻辑，校验是否传入了镜像参数
         if (!image) {
-          console.error(pc.red("❌ 错误: 未指定需要下载的镜像名称。"));
+          console.error(c.error("❌ 错误: 未指定需要下载的镜像名称。"));
           cmd.outputHelp();
           return;
         }

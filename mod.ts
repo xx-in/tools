@@ -19,6 +19,7 @@ import { registerTanslateCommand } from "./commands/translate.ts";
 import { registerUninstallCommand } from "./commands/uninstall.ts";
 import { registerUnzipCommand } from "./commands/unzip.ts";
 import { registerUpgradeCommand } from "./commands/upgrade.ts";
+import { registerWhichCommand } from "./commands/which.ts";
 import { registerZipCommand } from "./commands/zip.ts";
 
 const program = new Command();
@@ -47,6 +48,7 @@ registerTanslateCommand(program);
 registerUninstallCommand(program);
 registerUnzipCommand(program);
 registerUpgradeCommand(program);
+registerWhichCommand(program);
 registerZipCommand(program);
 
 program.parse(process.argv);

@@ -34,11 +34,11 @@ npm --registry=https://registry.npmjs.org/ install -g @xx-in/tools@latest
 npm --registry=https://registry.npmjs.org/ publish --access public
 ```
 
-也可以直接使用项目内置脚本：
+也可以直接使用项目内置脚本（自动 patch 升版本、同步 lock、构建并发布）：
 
 ```sh
-# 常规发布
-npm run publish:npm
+# 一键发布
+npm run pub
 
 # 强制走 npm 官方源发布
 npm run publish:npm:registry

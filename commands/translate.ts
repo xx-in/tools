@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import pc from "picocolors";
+import c from "../utils/colors.ts";
 import { translate } from "google-translate-api-x";
 import readline from "node:readline";
 import process from "node:process";
@@ -43,13 +43,13 @@ async function performTranslation(
     })) as unknown as TranslationResult;
 
     console.log(
-      `${pc.green("译文:")} ${pc.bold(res.text)} ${pc.dim(`(${res.from.language.iso} -> ${targetLang})`)}`,
+      `${c.success("译文:")} ${c.bold(res.text)} ${c.dim(`(${res.from.language.iso} -> ${targetLang})`)}`,
     );
   } catch (err) {
     if (err instanceof Error) {
-      console.error(pc.red("❌ 翻译出错:"), err.message);
+      console.error(c.error("❌ 翻译出错:"), err.message);
     } else {
-      console.error(pc.red("❌ 翻译出错:"), String(err));
+      console.error(c.error("❌ 翻译出错:"), String(err));
     }
   }
 }
@@ -59,7 +59,7 @@ function startInteractiveMode(userSpecifiedLang: string): void {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: pc.cyan("翻译输入 > "),
+    prompt: c.prompt("翻译输入 > "),
   });
 
   const modeTip =
@@ -67,8 +67,8 @@ function startInteractiveMode(userSpecifiedLang: string): void {
       ? "智能自动识别"
       : `强制目标语言: ${userSpecifiedLang}`;
 
-  console.log(pc.yellow(`✨ 已进入交互模式 (${modeTip})`));
-  console.log(pc.dim('输入 "exit" 或按 Ctrl+C 退出\n'));
+  console.log(c.warn(`✨ 已进入交互模式 (${modeTip})`));
+  console.log(c.dim('输入 "exit" 或按 Ctrl+C 退出\n'));
 
   rl.prompt();
 
@@ -87,7 +87,7 @@ function startInteractiveMode(userSpecifiedLang: string): void {
     console.log();
     rl.prompt();
   }).on("close", () => {
-    console.log(pc.blue("\n再见!"));
+    console.log(c.bye("\n再见!"));
     process.exit(0);
   });
 }
@@ -95,6 +95,7 @@ function startInteractiveMode(userSpecifiedLang: string): void {
 export function registerTanslateCommand(program: Command) {
   program
     .command("translate [text]")
+    .alias("dict")
     .description("终端翻译工具 (支持自动中英互译及交互模式)")
     .option(
       "-t, --to <lang>",

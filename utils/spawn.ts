@@ -27,11 +27,17 @@ export interface RunCommandResult {
 export function runCommand(
   cmd: string,
   args: string[],
-  options: { stdio?: "inherit" | "pipe" | "ignore" } = {},
+  options: {
+    stdio?: "inherit" | "pipe" | "ignore";
+    env?: NodeJS.ProcessEnv;
+  } = {},
 ): Promise<RunCommandResult> {
   const stdio = options.stdio ?? "pipe";
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio });
+    const child = spawn(cmd, args, {
+      stdio,
+      env: options.env ?? process.env,
+    });
 
     if (stdio === "inherit" || stdio === "ignore") {
       child.on("error", reject);
@@ -65,8 +71,12 @@ export function runCommand(
 export async function spawnCommand(
   cmd: string,
   args: string[],
+  options: { env?: NodeJS.ProcessEnv } = {},
 ): Promise<{ success: boolean; code: number | null }> {
-  const result = await runCommand(cmd, args, { stdio: "inherit" });
+  const result = await runCommand(cmd, args, {
+    stdio: "inherit",
+    env: options.env,
+  });
   return { success: result.success, code: result.code };
 }
 

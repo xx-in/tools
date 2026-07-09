@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { Command } from "commander";
-import pc from "picocolors";
+import c from "../utils/colors.ts";
 import { resolve, join } from "node:path";
 // 👈 使用具名导入 getFileInfo, resolveConfig, format
 import { getFileInfo, resolveConfig, format } from "prettier";
@@ -32,6 +32,7 @@ async function getFilesRecursively(dirPath: string): Promise<string[]> {
 export function registerFormatCommand(program: Command) {
   program
     .command("format [path]")
+    .alias("fmt")
     .description("使用 Prettier 自动格式化代码文件或目录中的所有文件")
     .action(async (targetPath: string | undefined) => {
       const inputPath = targetPath || ".";
@@ -42,23 +43,23 @@ export function registerFormatCommand(program: Command) {
       try {
         const stat = await fs.stat(absolutePath);
         if (stat.isDirectory()) {
-          console.log(pc.cyan(`🔍 正在扫描目录中的文件: ${absolutePath}...`));
+          console.log(c.info(`🔍 正在扫描目录中的文件: ${absolutePath}...`));
           targetFiles = await getFilesRecursively(absolutePath);
         } else if (stat.isFile()) {
           targetFiles = [absolutePath];
         }
       } catch {
-        console.error(pc.red(`❌ 错误: 找不到指定的路径 '${inputPath}'。`));
+        console.error(c.error(`❌ 错误: 找不到指定的路径 '${inputPath}'。`));
         return;
       }
 
       if (targetFiles.length === 0) {
-        console.log(pc.yellow("⚠️ 未找到任何可供格式化的文件。"));
+        console.log(c.warn("⚠️ 未找到任何可供格式化的文件。"));
         return;
       }
 
       console.log(
-        pc.cyan(`✨ 开始使用 Prettier 格式化 ${targetFiles.length} 个文件...`),
+        c.info(`✨ 开始使用 Prettier 格式化 ${targetFiles.length} 个文件...`),
       );
       let successCount = 0;
       let errorCount = 0;
@@ -89,23 +90,23 @@ export function registerFormatCommand(program: Command) {
           // 5. 若有改动则写回文件
           if (content !== formatted) {
             await fs.writeFile(filePath, formatted, "utf-8");
-            console.log(pc.green(`✔ 已格式化: ${filePath}`));
+            console.log(c.success(`✔ 已格式化: ${filePath}`));
           } else {
-            console.log(pc.dim(`➖ 无需修改: ${filePath}`));
+            console.log(c.dim(`➖ 无需修改: ${filePath}`));
           }
           successCount++;
         } catch (err) {
           errorCount++;
           console.error(
-            pc.red(`❌ 格式化失败 [${filePath}]:`),
+            c.error(`❌ 格式化失败 [${filePath}]:`),
             err instanceof Error ? err.message : err,
           );
         }
       }
 
       console.log(
-        pc.cyan(
-          `\n🏁 格式化流程结束! 成功: ${pc.bold(successCount)} 个, 忽略/不适配: ${pc.bold(ignoredCount)} 个, 失败: ${pc.bold(errorCount)} 个。`,
+        c.info(
+          `\n🏁 格式化流程结束! 成功: ${c.success(String(successCount))} 个, 忽略/不适配: ${c.dim(String(ignoredCount))} 个, 失败: ${c.error(String(errorCount))} 个。`,
         ),
       );
     });

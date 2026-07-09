@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { Command } from "commander";
-import pc from "picocolors";
+import c from "../utils/colors.ts";
 import { join, basename, extname, resolve } from "node:path";
 import {
   uncompressZip,
@@ -12,7 +12,7 @@ import { isCommandAvailable, spawnCommand } from "../utils/spawn.ts";
 async function uncompressRar(src: string, dest: string): Promise<void> {
   const hasUnrar = isCommandAvailable("unrar");
   if (hasUnrar) {
-    console.log(pc.cyan(`📦 正在调用系统 unrar 提取 RAR 压缩包...`));
+    console.log(c.info(`📦 正在调用系统 unrar 提取 RAR 压缩包...`));
     const status = await spawnCommand("unrar", ["x", "-y", src, dest]);
     if (!status.success) {
       throw new Error(`unrar 执行失败，进程退出码: ${status.code}`);
@@ -22,7 +22,7 @@ async function uncompressRar(src: string, dest: string): Promise<void> {
 
   const hasRar = isCommandAvailable("rar");
   if (hasRar) {
-    console.log(pc.cyan(`📦 正在调用系统 rar 提取 RAR 压缩包...`));
+    console.log(c.info(`📦 正在调用系统 rar 提取 RAR 压缩包...`));
     const status = await spawnCommand("rar", ["x", "-y", src, dest]);
     if (!status.success) {
       throw new Error(`rar 执行失败，进程退出码: ${status.code}`);
@@ -49,7 +49,7 @@ export function registerUnzipCommand(program: Command) {
           "请输入要解压的压缩包文件路径 (Enter compressed file path):",
         );
         if (!input) {
-          console.error(pc.red("❌ 错误: 未指定有效的压缩包文件。"));
+          console.error(c.error("❌ 错误: 未指定有效的压缩包文件。"));
           return;
         }
         srcFile = input.trim();
@@ -60,11 +60,11 @@ export function registerUnzipCommand(program: Command) {
       try {
         const stat = await fs.stat(absSrcFile);
         if (!stat.isFile()) {
-          console.error(pc.red(`❌ 错误: '${srcFile}' 不是一个有效的文件。`));
+          console.error(c.error(`❌ 错误: '${srcFile}' 不是一个有效的文件。`));
           return;
         }
       } catch {
-        console.error(pc.red(`❌ 错误: 找不到文件 '${srcFile}'。`));
+        console.error(c.error(`❌ 错误: 找不到文件 '${srcFile}'。`));
         return;
       }
 
@@ -87,8 +87,8 @@ export function registerUnzipCommand(program: Command) {
       }
 
       try {
-        console.log(pc.cyan(`📦 正在准备解压: ${absSrcFile}...`));
-        console.log(pc.cyan(`📥 目标输出目录: ${destDir}`));
+        console.log(c.info(`📦 正在准备解压: ${absSrcFile}...`));
+        console.log(c.info(`📥 目标输出目录: ${destDir}`));
 
         await fs.mkdir(destDir, { recursive: true });
 
@@ -102,17 +102,17 @@ export function registerUnzipCommand(program: Command) {
           await uncompressRar(absSrcFile, destDir);
         } else {
           console.log(
-            pc.yellow(
+            c.warn(
               "⚠️ 未能识别的压缩包格式后缀。将默认尝试作为标准 ZIP 进行提取...",
             ),
           );
           await uncompressZip(absSrcFile, destDir);
         }
 
-        console.log(pc.green(`✨ 提取成功！已保存到: ${destDir}`));
+        console.log(c.success(`✨ 提取成功！已保存到: ${destDir}`));
       } catch (error) {
         console.error(
-          pc.red("❌ 提取失败:"),
+          c.error("❌ 提取失败:"),
           error instanceof Error ? error.message : error,
         );
       }

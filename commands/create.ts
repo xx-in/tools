@@ -7,16 +7,17 @@ import {
 } from "../utils/spawn.ts";
 import fs from "node:fs/promises";
 import { Command } from "commander";
-import pc from "picocolors";
+import c from "../utils/colors.ts";
 import { dirname, resolve } from "node:path";
 
 export function registerCreateCommand(program: Command) {
   program
-    .command("create <paths...>") // 👈 使用 <paths...> 接收多个参数
+    .command("create <paths...>")
+    .alias("touch")
     .description("递归创建多个文件或目录（以 / 结尾则创建目录，否则创建文件）")
     .action(async (paths: string[]) => {
       if (!paths || paths.length === 0) {
-        console.error(pc.red("❌ 请提供至少一个要创建的路径"));
+        console.error(c.error("❌ 请提供至少一个要创建的路径"));
         return;
       }
 
@@ -30,7 +31,7 @@ export function registerCreateCommand(program: Command) {
           if (isDir) {
             // 创建目录
             await fs.mkdir(absolutePath, { recursive: true });
-            console.log(pc.green(`✨ 成功递归创建目录: ${absolutePath}`));
+            console.log(c.success(`✨ 成功递归创建目录: ${absolutePath}`));
           } else {
             // 创建文件：先确保其父级目录存在
             const parentDir = dirname(absolutePath);
@@ -39,11 +40,11 @@ export function registerCreateCommand(program: Command) {
             // 检查文件是否已存在，避免意外覆盖
             try {
               await fs.stat(absolutePath);
-              console.log(pc.yellow(`⚠️  文件已存在: ${absolutePath}`));
+              console.log(c.warn(`⚠️  文件已存在: ${absolutePath}`));
             } catch (err) {
               if (isNotFoundError(err)) {
                 await fs.writeFile(absolutePath, "", "utf-8");
-                console.log(pc.green(`✨ 成功创建文件: ${absolutePath}`));
+                console.log(c.success(`✨ 成功创建文件: ${absolutePath}`));
               } else {
                 throw err;
               }
@@ -51,7 +52,7 @@ export function registerCreateCommand(program: Command) {
           }
         } catch (err) {
           console.error(
-            pc.red(`❌ 创建失败 [${targetPath}]:`),
+            c.error(`❌ 创建失败 [${targetPath}]:`),
             err instanceof Error ? err.message : err,
           );
         }
